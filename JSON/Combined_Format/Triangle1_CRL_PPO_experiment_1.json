@@ -1,0 +1,63 @@
+{
+  "json_file": "/clean_rl/JSON/Triangle1_CRL_PPO_experiment_1.json",
+  "file_comments": "For Continuous action space testing with PPO algorith via Clean RL implementation",
+  "problem_instance": {
+    "name": "Triangle1",
+    "nodes": "[1, 2, 3]",
+    "links": "[[1,2], [1,3], [2,3]]",
+    "classes": {
+      "1": {
+        "source": 1,
+        "destination": 3,
+        "arrival": 3,
+        "probability": 1
+      }
+    },
+    "capacities": {
+      "(1,2)": {
+        "capacity": 3,
+        "probability": 1
+      },
+      "(1,3)": {
+        "capacity": 1,
+        "probability": 1
+      },
+      "(2,3)": {
+        "capacity": 3,
+        "probability": 1
+      }
+    }
+  },
+  "algo_parameters": {
+    "name": "PPO-para1",
+    "seed": 5031998,
+    "torch_deterministic": true,
+    "cuda": false,
+    "track": true,
+    "wandb_project_name": "clean_rl",
+    "wandb_entity": "jwigmore-research",
+    "total_timesteps": 500000,
+    "learning_rate": 1e-2,
+    "num_envs": 10,
+    "num_steps": 32,
+    "reset_steps": 32,
+    "anneal_lr": true,
+    "gamma": 1,
+    "gae_lambda": 0.95,
+    "num_minibatches": 4,
+    "update_epochs": 10,
+    "norm_adv": true,
+    "clip_coef": 0.2,
+    "clip_vloss": false,
+    "ent_coef": 0.0,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5,
+    "target_kl": "None"
+  },
+  "test_parameters": {
+    "num_steps": 500,
+    "num_envs": 10,
+    "bp_n_episodes": 10
+  }
+
+}
