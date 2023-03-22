@@ -164,11 +164,18 @@ class MultiClassMultiHop(gym.Env):
     # For parsing input dict
     def _extract_capacities(self, cap_dict):
         caps = {}
-        for link, l_info in cap_dict.items():
-            if isinstance(link, str):
-                link = eval(link)
-            rv = bern_rv(num = l_info['capacity'], prob= l_info['probability'])
-            caps[link] = rv
+        if '(0,0)' in cap_dict.keys():
+            # All links have the same capacity and probability
+            capacity = cap_dict['(0,0)']['capacity']
+            probability = cap_dict['(0,0)']['probability']
+            for link in self.links:
+                caps[link] = bern_rv(num=capacity, prob = probability)
+        else:
+            for link, l_info in cap_dict.items():
+                if isinstance(link, str):
+                    link = eval(link)
+                rv = bern_rv(num = l_info['capacity'], prob= l_info['probability'])
+                caps[link] = rv
 
         return caps
 

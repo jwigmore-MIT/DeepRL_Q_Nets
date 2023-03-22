@@ -104,6 +104,11 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
+    train_steps = 0
+    wandb.define_metric("train/step")
+    wandb.define_metric("train/*", step_metric="train/step")
+    wandb.define_metric("losses/*", step_metric="train/step")
+
     start_time = time.time()
     next_obs, _ = envs.reset(seed=train_args.seed)  ## TODO: see what reset() normally returns
     next_obs = torch.Tensor(next_obs).to(device)
@@ -135,6 +140,8 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                 # Note: each `step` corresponds to a step in all parallel environments run simultaneously
                 for step in range(0, train_args.num_steps): # num_steps: number of steps PER ROLLOUT
                     global_step += 1 * train_args.num_envs
+                    train_steps += 1 * train_args.num_envs
+                    wandb.log({"train/step":train_steps})
                     obs[step] = next_obs
                     dones[step] = next_done
 
@@ -165,9 +172,14 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                         average_eps_reward = info['episode']['r' ] /info['episode']['l']
                         sum_avg_eps_rewards += average_eps_reward
                         sum_eps_returns += info["episode"]["r"]
-                        writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                        writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
-                        writer.add_scalar("charts/episodic_average", average_eps_reward , global_step)
+                        wandb.log({
+                            "train/episodic_return": info["episode"]["r"],
+                            "train/episodic_length": info["episode"]["l"],
+                            "train/episodic_average": average_eps_reward,
+                        })
+                        # writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
+                        # writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+                        # writer.add_scalar("charts/episodic_average", average_eps_reward , global_step)
                     avg_LTA_reward = sum_avg_eps_rewards /infos['_final_info'].sum()/info["episode"]["l"]
                     avg_eps_return = sum_avg_eps_rewards /infos['_final_info'].sum()
                     #pbar.update(update)
@@ -281,16 +293,29 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                 explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
                 # TRY NOT TO MODIFY: record rewards for plotting purposes
-                writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
-                writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-                writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-                writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-                writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
-                writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-                writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
-                writer.add_scalar("losses/explained_variance", explained_var, global_step)
-                # print("SPS:", int(global_step / (time.time() - start_time)))
-                writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+                wandb.log({
+                    "train/learning_rate": optimizer.param_groups[0]["lr"],
+                    "losses/value_loss": v_loss.item(),
+                    "losses/policy_loss": pg_loss.item(),
+                    "losses/entropy": entropy_loss.item(),
+                    "losses/old_approx_kl": old_approx_kl.item(),
+                    "losses/approx_kl": approx_kl.item(),
+                    "losses/clipfrac": np.mean(clipfracs),
+                    "losses/explained_variance": explained_var
+
+                })
+
+
+                # writer.add_scalar("train/learning_rate", optimizer.param_groups[0]["lr"], global_step)
+                # writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
+                # writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
+                # writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
+                # writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
+                # writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
+                # writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
+                # writer.add_scalar("losses/explained_variance", explained_var, global_step)
+                # # print("SPS:", int(global_step / (time.time() - start_time)))
+                # writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
             manual_stop = True
             print(f"Training concluded after {update} updates")

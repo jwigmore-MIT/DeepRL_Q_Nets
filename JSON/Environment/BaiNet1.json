@@ -1,0 +1,33 @@
+{
+  "problem_instance": {
+    "name": "CrissCross1",
+    "nodes": "[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]",
+    "links": "[[1,2], [1,6], [2,3], [3,7], [3,8], [3,4], [4,5], [5, 16], [6,11], [6,7], [7,12], [7,8], [8,9], [9,10], [9,15], [10,15], [10,5], [11,16], [12,11], [12,7], [13,12], [13,9], [13,14], [13,14], [14,15], [15,16]]",
+    "classes": {
+      "1": {
+        "source": 1,
+        "destination": 16,
+        "arrival": 9,
+        "probability": 0.55
+      },
+      "2": {
+        "source": 3,
+        "destination": 16,
+        "arrival": 9,
+        "probability": 0.55
+      },
+      "3": {
+        "source": 13,
+        "destination": 16,
+        "arrival": 9,
+        "probability": 0.55
+      }
+    },
+    "capacities": {
+      "(0,0)": {
+        "capacity": 5,
+        "probability": 1
+      }
+    }
+  }
+}

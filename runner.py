@@ -34,11 +34,17 @@ def get_user_input():
 
     return tags, notes
 
+def add_final_notes(run):
+    input_str = input("Add any final notes:")
+    curr_notes = run.notes
+    new_notes = run.notes + f"\n" + "POST RUN NOTES:" + input_str
+    run.notes = new_notes
 
 
-TRAIN = False
+
+TRAIN = True
 TEST = False
-BP_TEST = True
+BP_TEST = False
 
 
 #model_load_path = "/home/jwigmore/PycharmProjects/DRL_Stoch_Qs/clean_rl/Best_models/16.03_07_55_CrissCrossTwoClass__PPO_para_1__5031998"
@@ -46,14 +52,15 @@ BP_TEST = True
 
 if __name__ == "__main__":
     # Retrieve training, environment, and test parameters from json files
-    train_param_path = "JSON/Training/PPO2.json"
+    train_param_path = "JSON/Training/PPOLARGE.json"
     train_args = parse_training_json(train_param_path)
-    env_param_path = "JSON/Environment/CrissCross1.json"
+    env_param_path = "JSON/Environment/BaiNet1.json"
     env_para = parse_env_json(env_param_path)
     test_param_path = "JSON/Testing/test1.json"
     test_args = parse_test_json(test_param_path)
     wandb_project = "DRL_For_SQN"
     wandb_entity = "jwigmore-research"
+
 
 
 
@@ -82,6 +89,10 @@ if __name__ == "__main__":
         checkpoint_saver = CheckpointSaver(save_model_path, env_string= env_para["name"], algo_string=train_args.name, decreasing=False, top_n=5)
 
         outputs = train_agent(env_para, train_args, test_args, run, checkpoint_saver)
+        try:
+            add_final_notes(run)
+        except Exception:
+            pass
         run.finish()
 
     if TEST:
@@ -105,6 +116,10 @@ if __name__ == "__main__":
         artifact = run.use_artifact(artifact_name, type='model')
 
         agent, test_rewards, test_history = test_from_artifact(run, test_args, env_para, artifact, store_history = True)
+        try:
+            add_final_notes(run)
+        except Exception:
+            pass
         run.finish()
 
     if BP_TEST:
@@ -124,6 +139,10 @@ if __name__ == "__main__":
             save_code=True,
         )
         all_rewards, test_history = test_BP(run, env_para, test_args, device= 'cpu')
+        try:
+            add_final_notes(run)
+        except Exception:
+            pass
         run.finish()
 
 
