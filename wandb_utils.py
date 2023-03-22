@@ -41,8 +41,8 @@ class CheckpointSaver:
             for file_name in os.listdir(self.dirpath):
                 if file_name.endswith('pt') and "manual" not in file_name:
                     file_path = os.path.join(self.dirpath,file_name)
-                    score_str = file_name.split("score")[1].split(".")[0]
-                    score = int(score_str)
+                    score_str = file_name.split("score")[1].replace(".pt","")
+                    score = float(score_str)
                     self.top_model_paths[file_path] = score
             self.sort_best_model_dict()
         else:
@@ -50,6 +50,7 @@ class CheckpointSaver:
 
     def __call__(self, model, epoch, metric_val):
         model_path = os.path.join(self.dirpath, model.__class__.__name__ + f'_epoch{epoch}_score{metric_val:.2e}.pt')
+        info_string = None
         if self.best_metric_vals.shape[0] < self.top_n:
             save = True
             info_str =  f"Less than {self.top_n} models saved for the Environenment/Training parameters, saving model at {model_path}, & logging model weights to W&B."
@@ -63,13 +64,14 @@ class CheckpointSaver:
             info_str = f"Current metric value better than {metric_val} better than best {n_th_best}, saving model at {model_path}, & logging model weights to W&B."
 
         if save:
-            logging.info(info_str)
+            #logging.info(info_str)
             torch.save(model.state_dict(), model_path)
             self.log_artifact(f'{self.env_string}_{self.algo_string}.pt', model_path, metric_val, epoch)
             self.top_model_paths[model_path] = metric_val
             self.sort_best_model_dict()
         if len(self.top_model_paths.keys()) > self.top_n:
             self.cleanup()
+        return self.best_metric_vals, info_str
 
     def log_artifact(self, filename, model_path, metric_val, epoch):
         artifact = wandb.Artifact(filename, type='model', metadata={'Validation score': metric_val, 'Epoch': epoch})
@@ -83,7 +85,7 @@ class CheckpointSaver:
     def cleanup(self):
         all_model_paths = list(tuple(self.top_model_paths))
         to_remove = all_model_paths[self.top_n:]
-        logging.info(f"Removing extra models.. {to_remove}")
+        #logging.info(f"Removing extra models.. {to_remove}")
         for o in to_remove:
             os.remove(o)
             del self.top_model_paths[o]
@@ -133,9 +135,16 @@ def wandb_plot_rewards_vs_time(rewards_vs_time, policy_name):
         yaxis_title="LTA")
     #fig2.show()
     wandb.log({"LTA_vs_Time": fig2})
-    wandb.define_metric("test/LTA", summary = "mean")
+    wandb.define_metric("test/step")
+    wandb.define_metric("test/LTA", summary = "mean", step = "test/step")
+
     for i in range(df.shape[0]):
-        wandb.log({"test/LTA": df["LTA_Rewards"][i]})
+        log_dict = {
+            "test/step": i,
+            "test/LTA": df["LTA_Rewards"][i],
+        }
+        wandb.log(log_dict)
+
 
     table = wandb.Table(dataframe = df) # columns = [f"Env {e}" for e in range(data.shape[0])])
     wandb.log({"test_rewards_table": table})

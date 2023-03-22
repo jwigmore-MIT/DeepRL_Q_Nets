@@ -36,9 +36,9 @@ def get_user_input():
 
 
 
-TRAIN = True
+TRAIN = False
 TEST = False
-BP_TEST = False
+BP_TEST = True
 
 
 #model_load_path = "/home/jwigmore/PycharmProjects/DRL_Stoch_Qs/clean_rl/Best_models/16.03_07_55_CrissCrossTwoClass__PPO_para_1__5031998"
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     if TEST:
         dt_string = datetime.now().strftime("%m-%d_%H%M")
         run_name = f"TEST_{env_para['name']}_{test_args.name}_{dt_string}"
-        artifact_name  = "jwigmore-research/DRL_For_SQN/Triangle1_PPO-p1.pt:v136"
+        artifact_name  = "jwigmore-research/DRL_For_SQN/CrissCross1_PPO-cpdebug.pt:v627"
         setattr(test_args,"artifact_name", artifact_name)
         tags, notes = get_user_input()
 
@@ -102,7 +102,7 @@ if __name__ == "__main__":
             notes = notes,
             save_code=True,
         )
-        artifact = run.use_artifact('jwigmore-research/DRL_For_SQN/Triangle1_PPO-p1.pt:v136', type='model')
+        artifact = run.use_artifact(artifact_name, type='model')
 
         agent, test_rewards, test_history = test_from_artifact(run, test_args, env_para, artifact, store_history = True)
         run.finish()

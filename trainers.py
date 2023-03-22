@@ -13,6 +13,11 @@ from torch.utils.tensorboard import SummaryWriter
 import logging
 logging.getLogger().setLevel(logging.INFO)
 
+tqdm_config = {
+    "dynamic_ncols": True,
+    "ascii": True,
+}
+
 
 
 # Import custom methods
@@ -109,8 +114,8 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
     manual_stop = False
     while not manual_stop:
         try:
-            for update in range(1, num_updates + 1):
-
+            pbar = tqdm(range(num_updates+1))
+            for update in pbar:
                 # Annealing the rate if instructed to do so.
                 if train_args.anneal_lr:
                     frac = 1.0 - (update - 1.0) / num_updates
@@ -165,18 +170,24 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                         writer.add_scalar("charts/episodic_average", average_eps_reward , global_step)
                     avg_LTA_reward = sum_avg_eps_rewards /infos['_final_info'].sum()/info["episode"]["l"]
                     avg_eps_return = sum_avg_eps_rewards /infos['_final_info'].sum()
+                    #pbar.update(update)
 
-                    checkpoint_saver(agent, update ,avg_LTA_reward[0])
+
+                    best_scores, info_string = checkpoint_saver(agent, update ,avg_LTA_reward[0])
 
                     if avg_LTA_reward > best_LTA: # check if the average LTA reward is greater than the previous best
-                        print(f"FOUND NEW BEST POLICY: Making a manual save")
-                        # torch.save(agent.state_dict(), f"{wandb.run.dir}/agent.pt")
+                        new_best = True
                         torch.save(agent.state_dict(), checkpoint_saver.dirpath + f"manual_save.pt")
                         best_LTA = avg_LTA_reward
-                        #if abs(best_LTA )< 7:
-                        #    test_rewards, test_history = agent_test(run, agent, env_para, test_args, store_history= True)
-                    print(
-                        f"global_step={global_step}, avg_episodic_return={avg_eps_return}, average_LTA_reward = {avg_LTA_reward}, current_best = {best_LTA}")
+
+
+                    pbar.set_postfix({"Global_Step": global_step,
+                                      "avg_eps_ret": round(avg_eps_return[0],3),
+                                      "avg_LTA_rew": avg_LTA_reward[0],
+                                      "best_run_score": round(best_LTA[0],4),
+                                      "best_overall_score": best_scores[0]}
+                                     )
+
                     stop = Stopper.update(avg_LTA_reward)
                 """
                 STEP (2): COMPUTE LOSSES AND GRADIENTS FROM ROLLOUT DATA
@@ -280,6 +291,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                 writer.add_scalar("losses/explained_variance", explained_var, global_step)
                 # print("SPS:", int(global_step / (time.time() - start_time)))
                 writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+
             manual_stop = True
             print(f"Training concluded after {update} updates")
         except KeyboardInterrupt:
