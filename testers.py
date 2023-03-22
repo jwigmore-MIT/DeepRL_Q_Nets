@@ -4,6 +4,7 @@ import pandas as pd
 import gymnasium as gym
 import torch
 import os
+import random
 from tqdm import tqdm
 from NonDRLPolicies.Backpressure import MCMHBackPressurePolicy
 import wandb
@@ -67,10 +68,13 @@ def test_from_artifact(run, test_args, env_para, artifact, store_history = True)
 def agent_test(run, agent, env_para, test_args, store_history = True):
     from utils import plot_performance_vs_time
 
-
+    # Seeding
+    random.seed(test_args.seed)
+    np.random.seed(test_args.seed)
+    torch.manual_seed(test_args.seed)
+    torch.backends.cudnn.deterministic = True
 
     # Torch/Cuda setup
-    torch.backends.cudnn.deterministic = True
     device = torch.device("cpu")
 
 
@@ -81,6 +85,7 @@ def agent_test(run, agent, env_para, test_args, store_history = True):
     # Init test history - stores all trajectory information for debugging
     if store_history:
         test_history = {}
+        test_history["Env_seeds"] = []
     else:
         test_history = ""
 
@@ -92,8 +97,9 @@ def agent_test(run, agent, env_para, test_args, store_history = True):
     # Loop through number of tests manually
     with torch.no_grad():
         for n_env in tqdm(range(test_args.num_envs), desc = "Running Test on Agent"):
-            env = gym.vector.SyncVectorEnv([make_MCMH_env(env_para, max_steps=test_length)])
-            next_obs, _ = env.reset()
+            env = gym.vector.SyncVectorEnv([make_MCMH_env(env_para, max_steps=test_length, test = True)])
+            test_seed = np.random.random_integers(0, 1e6)
+            next_obs, _ = env.reset(seed = [test_seed] )
             next_obs = torch.Tensor(next_obs).to(device)
             if store_history:
                 state_keys = env.envs[0].unwrapped.get_flat_obs_keys()
@@ -104,6 +110,7 @@ def agent_test(run, agent, env_para, test_args, store_history = True):
                 actions = np.zeros([test_length, env.single_action_space.shape[0]])
                 flows = np.zeros([test_length, env.single_action_space.shape[0]])
                 arrivals = np.zeros([test_length, len(arrival_keys)])
+                test_history["Env_seeds"].append(test_seed)
             for t in range(test_length):
                 if store_history:
                     obs[t] = np.array(next_obs)
@@ -143,7 +150,14 @@ def agent_test(run, agent, env_para, test_args, store_history = True):
 def test_BP(run, env_para, test_args, device='cpu', store_history=True):
     from utils import plot_performance_vs_time
     from environment_init import make_MCMH_env
+
+    # Seeding
+    random.seed(test_args.seed)
+    np.random.seed(test_args.seed)
+    torch.manual_seed(test_args.seed)
     torch.backends.cudnn.deterministic = True
+
+    # Torch device setup
     device = torch.device(device)
 
     # init storage
@@ -152,16 +166,18 @@ def test_BP(run, env_para, test_args, device='cpu', store_history=True):
     all_rewards = np.zeros([test_length, n_envs])
     if store_history:
         test_history = {}
+        test_history["Env_seeds"] = []
     else:
         test_history = ""
 
     # Initialize BP 'Agent'
-    env = make_MCMH_env(env_para, max_steps=test_length)()
+    env = make_MCMH_env(env_para, max_steps=test_length, test = True)()
     agent = MCMHBackPressurePolicy(env)
 
     with torch.no_grad():
         for n_env in tqdm(range(n_envs), desc="Running Test on BP Agent"):
-            next_obs, _ = env.reset()
+            test_seed = np.random.random_integers(1e6)
+            next_obs, _ = env.reset(seed=test_seed)
             if store_history:
                 state_keys = env.get_flat_obs_keys()
                 action_keys = env.get_flat_action_keys(mod='A')
@@ -171,6 +187,8 @@ def test_BP(run, env_para, test_args, device='cpu', store_history=True):
                 actions = np.zeros([test_length, env.action_space.shape[0]])
                 flows = np.zeros([test_length, env.action_space.shape[0]])
                 arrivals = np.zeros([test_length, len(arrival_keys)])
+                test_history["Env_seeds"].append(test_seed)
+
             for t in range(test_length):
                 if store_history:
                     obs[t] = next_obs

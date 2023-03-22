@@ -49,7 +49,7 @@ class CheckpointSaver:
             self.top_model_paths = {}
 
     def __call__(self, model, epoch, metric_val):
-        model_path = os.path.join(self.dirpath, model.__class__.__name__ + f'_epoch{epoch}_score{metric_val:0.1f}.pt')
+        model_path = os.path.join(self.dirpath, model.__class__.__name__ + f'_epoch{epoch}_score{metric_val:.2e}.pt')
         if self.best_metric_vals.shape[0] < self.top_n:
             save = True
             info_str =  f"Less than {self.top_n} models saved for the Environenment/Training parameters, saving model at {model_path}, & logging model weights to W&B."

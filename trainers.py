@@ -2,6 +2,7 @@
 
 import time
 import wandb
+import random
 import gymnasium as gym
 import numpy as np
 import torch
@@ -66,9 +67,9 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
 
     ## Set the seed of random, np.random, and torch
     # TRY NOT TO MODIFY: seeding
-    # random.seed(train_args.seed)
-    # np.random.seed(train_args.seed)
-    # torch.manual_seed(train_args.seed)
+    random.seed(train_args.seed)
+    np.random.seed(train_args.seed)
+    torch.manual_seed(train_args.seed)
     torch.backends.cudnn.deterministic = train_args.torch_deterministic
 
     ## Select the device
@@ -76,7 +77,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
 
     # Initialize the environments
     envs = gym.vector.SyncVectorEnv(
-        [make_MCMH_env(env_para, max_steps = train_args.num_steps) for i in range(train_args.num_envs)]
+        [make_MCMH_env(env_para, max_steps = train_args.num_steps, test = False) for i in range(train_args.num_envs)]
     )
 
     # Initialize agents and pass agents (nn.module) to device
@@ -109,18 +110,23 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
     while not manual_stop:
         try:
             for update in range(1, num_updates + 1):
-                # try:
-                #     stdin = sys.stdin.read()
-                #     if "\n" in stdin or "\r" in stdin:
-                #         print(f"Received User Input - Ending training after {update} updates")
-                #         break
-                # except IOError:
-                #     pass
+
                 # Annealing the rate if instructed to do so.
                 if train_args.anneal_lr:
                     frac = 1.0 - (update - 1.0) / num_updates
                     lrnow = frac * train_args.learning_rate
                     optimizer.param_groups[0]["lr"] = lrnow
+                ## (1) COLLECT ROLLOUT
+                '''
+                STEP (1): COLLECT ROLLLOUT
+                    For all environments, we collect a rollout of length train_args.num_steps, and record for each (env,step)
+                    a. obs - state which is input into the policy and value networks
+                    b. dones - if the environment was terminated/truncated
+                    c. action - action output by policy function
+                    d. logpob - log probability of taking said action i.e. log \pi(a_t|s_t)
+                    e. value - value network output i.e. v(s_t)
+                    f. reward - observed rewards
+                '''
                 # Note: each `step` corresponds to a step in all parallel environments run simultaneously
                 for step in range(0, train_args.num_steps): # num_steps: number of steps PER ROLLOUT
                     global_step += 1 * train_args.num_envs
@@ -157,7 +163,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                         writer.add_scalar("charts/episodic_average", average_eps_reward , global_step)
-                    avg_LTA_reward = sum_avg_eps_rewards /infos['_final_info'].sum()
+                    avg_LTA_reward = sum_avg_eps_rewards /infos['_final_info'].sum()/info["episode"]["l"]
                     avg_eps_return = sum_avg_eps_rewards /infos['_final_info'].sum()
 
                     checkpoint_saver(agent, update ,avg_LTA_reward[0])
@@ -172,12 +178,19 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                     print(
                         f"global_step={global_step}, avg_episodic_return={avg_eps_return}, average_LTA_reward = {avg_LTA_reward}, current_best = {best_LTA}")
                     stop = Stopper.update(avg_LTA_reward)
+                """
+                STEP (2): COMPUTE LOSSES AND GRADIENTS FROM ROLLOUT DATA
+                """
 
-                # bootstrap value if not done
                 with torch.no_grad():
+                    # bootstrap value if not done
                     next_value = agent.get_value(next_obs).reshape(1, -1)
                     advantages = torch.zeros_like(rewards).to(device)
                     lastgaelam = 0
+                    ''' (2a) Bootstrapping
+                        if a sub-environment is not terminated nor truncated, 
+                        PPO estimates the value of the next state in this sub-environment as the value target.
+                    '''
                     for t in reversed(range(train_args.num_steps)):
                         if t == train_args.num_steps - 1:
                             nextnonterminal = 1.0 - next_done
@@ -267,6 +280,8 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                 writer.add_scalar("losses/explained_variance", explained_var, global_step)
                 # print("SPS:", int(global_step / (time.time() - start_time)))
                 writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+            manual_stop = True
+            print(f"Training concluded after {update} updates")
         except KeyboardInterrupt:
             print('\n')
             print("!" * 30)
