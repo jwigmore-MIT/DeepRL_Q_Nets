@@ -1,8 +1,9 @@
-#from tianshou.policy import BasePolicy
-#from tianshou.data import Batch
+
 import pulp
 from copy import deepcopy
 import numpy as np
+
+
 from Environments.MCMH_tools import *
 from torch import nn
 
@@ -70,7 +71,8 @@ class MCMHBackPressurePolicy(nn.Module):
             # check if flattened
             if hasattr(state.obs, 'ndim') and state.obs.ndim == 3:
                 state = self.env.unflatten_obs(state.obs[0,0,:])
-
+        if isinstance(state, np.ndarray):
+            state = self.env.unflatten_obs(state)
 
         Q = keys_to_ints(state['Q'])
         #Cap = keys_to_ints(state['Cap'])

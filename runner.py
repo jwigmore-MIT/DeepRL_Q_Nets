@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore')
 
 
 from param_extractors import parse_training_json, parse_test_json, parse_env_json
-from testers import test_from_artifact
+from testers import test_from_artifact, test_BP
 from wandb_utils import CheckpointSaver
 from trainers import train_agent
 
@@ -22,10 +22,16 @@ def load_local_agent(agent_path):
     agent.load_state_dict(torch.load(agent_path))
 
 
-
+def get_tags():
+    input_str = input("Input any tags")
+    tags = input_str.replace(" ", "").split(",")
+    if "" in tags:
+        tags.remove("")
+    return tags
 
 TRAIN = True
 TEST = False
+BP_TEST = False
 WANDB_TEST = False
 
 #model_load_path = "/home/jwigmore/PycharmProjects/DRL_Stoch_Qs/clean_rl/Best_models/16.03_07_55_CrissCrossTwoClass__PPO_para_1__5031998"
@@ -42,32 +48,14 @@ if __name__ == "__main__":
     wandb_project = "DRL_For_SQN"
     wandb_entity = "jwigmore-research"
 
-
-
-    if TEST:
-        dt_string = datetime.now().strftime("%m-%d_%H%M")
-        run_name = f"TEST_{env_para['name']}_{test_args.name}_{dt_string}"
-        artifact_name  = "jwigmore-research/DRL_For_SQN/Triangle1_PPO-p1.pt:v136"
-        setattr(test_args,"artifact_name", artifact_name)
-
-        run = wandb.init(
-            project=wandb_project,
-            entity=wandb_entity,
-            job_type='Test',
-            name=run_name,
-            sync_tensorboard=True,
-            config=vars(test_args),
-            save_code=True,
-        )
-        artifact = run.use_artifact('jwigmore-research/DRL_For_SQN/Triangle1_PPO-p1.pt:v136', type='model')
-
-        agent, test_rewards, test_history = test_from_artifact(run, test_args, env_para, artifact, store_history = True)
-        run.finish()
+    if wandb.run:
+        print("Previous wandb process is running... Killing it!")
+        wandb.finish()
 
     if TRAIN:
         dt_string = datetime.now().strftime("%m-%d_%H%M")
         run_name = f"TRAIN_{env_para['name']}_{train_args.name}_{dt_string}"
-
+        tags = get_tags()
 
         run = wandb.init(
             project=wandb_project,
@@ -76,22 +64,63 @@ if __name__ == "__main__":
             name=run_name,
             sync_tensorboard=True,
             config=vars(train_args),
+            tags = tags,
             save_code=True,
         )
 
-        save_model_path = f"Saved_Models\\{env_para['name']}\\{train_args.name}\\"
+        save_model_path = f"Saved_Models/{env_para['name']}/{train_args.name}/"
         checkpoint_saver = CheckpointSaver(save_model_path, env_string= env_para["name"], algo_string=train_args.name, decreasing=False, top_n=5)
 
         outputs = train_agent(env_para, train_args, test_args, run, checkpoint_saver)
+        run.finish()
+
+    if TEST:
+        dt_string = datetime.now().strftime("%m-%d_%H%M")
+        run_name = f"TEST_{env_para['name']}_{test_args.name}_{dt_string}"
+        artifact_name  = "jwigmore-research/DRL_For_SQN/Triangle1_PPO-p1.pt:v136"
+        setattr(test_args,"artifact_name", artifact_name)
+        tags = get_tags()
+        run = wandb.init(
+            project=wandb_project,
+            entity=wandb_entity,
+            job_type='Test',
+            name=run_name,
+            sync_tensorboard=True,
+            config=vars(test_args),
+            tags = tags,
+            save_code=True,
+        )
+        artifact = run.use_artifact('jwigmore-research/DRL_For_SQN/Triangle1_PPO-p1.pt:v136', type='model')
+
+        agent, test_rewards, test_history = test_from_artifact(run, test_args, env_para, artifact, store_history = True)
+        run.finish()
+
+    if BP_TEST:
+        dt_string = datetime.now().strftime("%m-%d_%H%M")
+        run_name = f"TEST_BP_{env_para['name']}_{test_args.name}_{dt_string}"
+        tags = get_tags()
+        run = wandb.init(
+            project=wandb_project,
+            entity=wandb_entity,
+            job_type='Test',
+            name=run_name,
+            sync_tensorboard=True,
+            config=vars(test_args),
+            tags = tags,
+            save_code=True,
+        )
+        all_rewards, test_history = test_BP(run, env_para, test_args, device= 'cpu')
         run.finish()
 
 
 
 
 
-    best_model_dir = "Best_models/"
+
+
 
     if WANDB_TEST:
+        best_model_dir = "Best_models/"
         dt_string = datetime.now().strftime("%m-%d_%H%M")
         run_name = f"{dt_string}_{env_para['name']}_{train_args.name}"
         run_name = f"{dt_string}_model-retr-test"

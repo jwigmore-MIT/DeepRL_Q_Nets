@@ -1,6 +1,7 @@
 {
   "test_parameters": {
     "name": "test1",
+    "seed": 1010101,
     "num_steps": 500,
     "num_envs": 10,
     "bp_n_episodes": 10
