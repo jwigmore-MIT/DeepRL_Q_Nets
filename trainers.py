@@ -193,12 +193,12 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                         best_LTA = avg_LTA_reward
 
 
-                    pbar.set_postfix({"Global_Step": global_step,
-                                      "avg_eps_ret": round(avg_eps_return[0],3),
-                                      "avg_LTA_rew": avg_LTA_reward[0],
-                                      "best_run_score": round(best_LTA[0],4),
-                                      "best_overall_score": best_scores[0]}
-                                     )
+                    # pbar.set_postfix({"Global_Step": global_step,
+                    #                   "avg_eps_ret": round(avg_eps_return[0],3),
+                    #                   "avg_LTA_rew": avg_LTA_reward[0],
+                    #                   "best_run_score": round(best_LTA[0],4),
+                    #                   "best_overall_score": best_scores[0]}
+                    #                  )
 
                     stop = Stopper.update(avg_LTA_reward)
                 """
@@ -295,6 +295,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                 # TRY NOT TO MODIFY: record rewards for plotting purposes
                 wandb.log({
                     "train/learning_rate": optimizer.param_groups[0]["lr"],
+                    "train/SPS": int(train_steps / (time.time() - start_time)),
                     "losses/value_loss": v_loss.item(),
                     "losses/policy_loss": pg_loss.item(),
                     "losses/entropy": entropy_loss.item(),

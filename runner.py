@@ -42,8 +42,8 @@ def add_final_notes(run):
 
 
 
-TRAIN = True
-TEST = False
+TRAIN = False
+TEST = True
 BP_TEST = False
 
 
@@ -60,6 +60,9 @@ if __name__ == "__main__":
     test_args = parse_test_json(test_param_path)
     wandb_project = "DRL_For_SQN"
     wandb_entity = "jwigmore-research"
+    if TEST:
+        artifact_name  = "jwigmore-research/DRL_For_SQN/BaiNet1_PPO-BaiNet.pt:v57"
+
 
 
 
@@ -98,7 +101,6 @@ if __name__ == "__main__":
     if TEST:
         dt_string = datetime.now().strftime("%m-%d_%H%M")
         run_name = f"TEST_{env_para['name']}_{test_args.name}_{dt_string}"
-        artifact_name  = "jwigmore-research/DRL_For_SQN/CrissCross1_PPO-cpdebug.pt:v627"
         setattr(test_args,"artifact_name", artifact_name)
         tags, notes = get_user_input()
 

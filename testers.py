@@ -75,7 +75,7 @@ def agent_test(run, agent, env_para, test_args, store_history = True):
     torch.backends.cudnn.deterministic = True
 
     # Torch/Cuda setup
-    device = torch.device("cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() and test_args.cuda else "cpu")
 
 
     # Set agent to test
