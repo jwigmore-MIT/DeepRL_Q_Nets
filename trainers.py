@@ -200,7 +200,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                     #                   "best_overall_score": best_scores[0]}
                     #                  )
 
-                    stop = Stopper.update(avg_LTA_reward)
+                    #stop = Stopper.update(avg_LTA_reward)
                 """
                 STEP (2): COMPUTE LOSSES AND GRADIENTS FROM ROLLOUT DATA
                 """
