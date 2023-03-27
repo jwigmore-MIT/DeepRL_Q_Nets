@@ -211,13 +211,13 @@ class MultiClassMultiHop(gym.Env):
             c_ij = self.Cap[link]
             for cls, flow in link_flow.items():
                 # Ensure not sending more than start node class queue or link capacity f_ijk <= min(Q_ik, c=C_ij)
-                f_max = min(Q_old[start_node][cls],c_ij) # f_max <= Q_ik(old)
+                f_max = min(Q_old[start_node][cls],c_ij, self.Q[start_node][cls]) # f_max <= Q_ik(old)
 
                 # Apply bound to f_ijk
                 self.f[link][cls] = max(0,min(f_max, flow)) # 0<= f_ijk <= f_max <= Q_ik(old)
 
                 # Subtract f_ijk from start node class k queue
-                self.Q[start_node][cls] = self.Q[start_node][cls]-self.f[link][cls]
+                self.Q[start_node][cls] = max(self.Q[start_node][cls]-self.f[link][cls],0)
 
                 # Add f_ijk to end node class k queue, if its not the destination
                 if end_node ==  self.classes[cls][1]:
