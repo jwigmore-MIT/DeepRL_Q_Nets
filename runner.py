@@ -1,6 +1,9 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_continuous_actionpy
 
 import os
+
+import pandas as pd
+
 os.environ['FOR_DISABLE_CONSOLE_CTRL_HANDLER'] = '1'
 from datetime import datetime
 import wandb
@@ -41,29 +44,40 @@ def add_final_notes(run):
     run.notes = new_notes
 
 
-ENV_TEST = False
+ENV_TEST = True
 
 TRAIN = False
 TEST = False
 BP_TEST = False
-BAI_STATIC_TEST = True
+STATIC_TEST = True
 
 
 #model_load_path = "/home/jwigmore/PycharmProjects/DRL_Stoch_Qs/clean_rl/Best_models/16.03_07_55_CrissCrossTwoClass__PPO_para_1__5031998"
 # https://www.reddit.com/r/reinforcementlearning/comments/11txwjw/agent_not_learning_3_problems_and_solutions/
 
 ''' TO RUN
-Static Policy Test on Bai Net
+1. BP Stability on CrissCross2
+2. TRAINING PPO Agent on CrissCross2
+3. TEST Learned PPO Agent on CrissCross2
+4. Static Stabilizing Policy
 '''
 if __name__ == "__main__":
     # Retrieve training, environment, and test parameters from json files
-    train_param_path = "JSON/Training/PPOLARGE.json"
+    train_param_path = "JSON/Training/PPO2.json"
+    train_name = train_param_path.split("/")[-1].replace(".json","")
     train_args = parse_training_json(train_param_path)
-    env_param_path = "JSON/Environment/BaiNet1.json"
+
+    env_param_path = "JSON/Environment/CrissCross2.json"
+    env_name = env_param_path.split("/")[-1].replace(".json","")
     env_para = parse_env_json(env_param_path)
-    test_param_path = "JSON/Testing/test1000.json"
+
+    test_param_path = "JSON/Testing/test-BP-Stability.json"
+    test_name = test_param_path.split("/")[-1].replace(".json","")
     test_args = parse_test_json(test_param_path)
-    wandb_project = "DRL_For_SQN"
+
+    static_pol = env_name
+
+    wandb_project = "Scheduling_Routing_DRL"
     wandb_entity = "jwigmore-research"
     if TEST:
         artifact_name  = "jwigmore-research/DRL_For_SQN/BaiNet1_PPO-BaiNet.pt:v57"
@@ -80,7 +94,7 @@ if __name__ == "__main__":
 
     if TRAIN:
         dt_string = datetime.now().strftime("%m-%d_%H%M")
-        run_name = f"TRAIN_{env_para['name']}_{train_args.name}_{dt_string}"
+        run_name = f"TRAIN_{env_name}_{train_name}_{dt_string}"
         tags, notes = get_user_input()
 
         run = wandb.init(
@@ -95,8 +109,8 @@ if __name__ == "__main__":
             save_code=True,
         )
 
-        save_model_path = f"Saved_Models/{env_para['name']}/{train_args.name}/"
-        checkpoint_saver = CheckpointSaver(save_model_path, env_string= env_para["name"], algo_string=train_args.name, decreasing=False, top_n=5)
+        save_model_path = f"Saved_Models/{env_name}/{train_name}/"
+        checkpoint_saver = CheckpointSaver(save_model_path, env_string= env_name, algo_string=train_name, decreasing=False, top_n=5)
 
         outputs = train_agent(env_para, train_args, test_args, run, checkpoint_saver)
         try:
@@ -107,7 +121,7 @@ if __name__ == "__main__":
 
     if TEST:
         dt_string = datetime.now().strftime("%m-%d_%H%M")
-        run_name = f"TEST_{env_para['name']}_{test_args.name}_{dt_string}"
+        run_name = f"TEST_{env_name}_{test_name}_{dt_string}"
         setattr(test_args,"artifact_name", artifact_name)
         tags, notes = get_user_input()
 
@@ -124,7 +138,7 @@ if __name__ == "__main__":
         )
         artifact = run.use_artifact(artifact_name, type='model')
 
-        agent, test_rewards, test_history = test_from_artifact(run, test_args, env_para, artifact, store_history = True)
+        test_outputs = test_from_artifact(run, test_args, env_para, artifact, store_history = True)
         try:
             add_final_notes(run)
         except Exception:
@@ -133,7 +147,7 @@ if __name__ == "__main__":
 
     if BP_TEST:
         dt_string = datetime.now().strftime("%m-%d_%H%M")
-        run_name = f"TEST_BP_{env_para['name']}_{test_args.name}_{dt_string}"
+        run_name = f"TEST_BP_{env_name}_{test_name}_{dt_string}"
         tags, notes = get_user_input()
 
         run = wandb.init(
@@ -147,18 +161,18 @@ if __name__ == "__main__":
             notes = notes,
             save_code=True,
         )
-        all_rewards, test_history = test_BP(run, env_para, test_args, device= 'cpu')
+        test_outputs = test_BP(run, env_para, test_args, device= 'cpu')
         try:
             add_final_notes(run)
         except Exception:
             pass
         run.finish()
 
-    if BAI_STATIC_TEST:
-        from testers import test_StaticPolicy_BaiNet
+    if STATIC_TEST:
+        from testers import test_StaticPolicy
 
         dt_string = datetime.now().strftime("%m-%d_%H%M")
-        run_name = f"TEST_SP_{env_para['name']}_{test_args.name}_{dt_string}"
+        run_name = f"TEST_SP_{env_name}_{test_name}_{dt_string}"
         tags, notes = get_user_input()
 
         run = wandb.init(
@@ -172,7 +186,7 @@ if __name__ == "__main__":
             notes=notes,
             save_code=True,
         )
-        all_rewards, test_history = test_StaticPolicy_BaiNet(run, env_para, test_args, device= 'cpu')
+        test_outputs = test_StaticPolicy(run, static_pol, env_para, test_args, device= 'cpu')
         try:
             add_final_notes(run)
         except Exception:
@@ -181,6 +195,26 @@ if __name__ == "__main__":
 
 
 
+
+def plot_qs_vs_time(test_history, merge = True):
+    from copy import deepcopy
+    import pandas as pd
+    q_dfs = []
+    for key, value in test_history.items():
+        if key is 'Env_seeds':
+            continue
+        else:
+            df = value
+            q_cols = [x for x in df.columns if "Q" in x]
+            qi_df = df.loc[:, q_cols]
+            q_dfs.append(qi_df)
+    if merge:
+        q_df = pd.concat(q_dfs).groupby(level = 0, axis = 'columns').mean()
+        fig = q_df.plot()
+        fig.show()
+        return q_dfs, q_df
+    else:
+        return q_dfs, None
 
 
 
