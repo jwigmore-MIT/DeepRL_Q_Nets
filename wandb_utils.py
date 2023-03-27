@@ -151,7 +151,21 @@ def wandb_plot_rewards_vs_time(rewards_vs_time, policy_name):
     return df
 
 
-def wandb_plot_avg_vs_time(rewards_vs_time, policy_name):
-    # Replicating utils.plot_performance vs time, but exporting to wandb
-
-    pass
+def wandb_test_qs_vs_time(test_history, merge= True):
+    q_dfs = []
+    for key, value in test_history.items():
+        if key is 'Env_seeds':
+            continue
+        else:
+            df = value
+            q_cols = [x for x in df.columns if "Q" in x]
+            qi_df = df.loc[:, q_cols]
+            q_dfs.append(qi_df)
+    if merge:
+        q_df = pd.concat(q_dfs).groupby(level=0, axis='columns').mean()
+        fig = q_df.plot()
+        #fig.show()
+        wandb.log({"Average_Qs":fig})
+        return q_dfs, q_df
+    else:
+        return q_dfs, None
