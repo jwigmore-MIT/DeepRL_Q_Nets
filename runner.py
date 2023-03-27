@@ -41,22 +41,27 @@ def add_final_notes(run):
     run.notes = new_notes
 
 
+ENV_TEST = False
 
 TRAIN = False
-TEST = True
+TEST = False
 BP_TEST = False
+BAI_STATIC_TEST = True
 
 
 #model_load_path = "/home/jwigmore/PycharmProjects/DRL_Stoch_Qs/clean_rl/Best_models/16.03_07_55_CrissCrossTwoClass__PPO_para_1__5031998"
 # https://www.reddit.com/r/reinforcementlearning/comments/11txwjw/agent_not_learning_3_problems_and_solutions/
 
+''' TO RUN
+Static Policy Test on Bai Net
+'''
 if __name__ == "__main__":
     # Retrieve training, environment, and test parameters from json files
     train_param_path = "JSON/Training/PPOLARGE.json"
     train_args = parse_training_json(train_param_path)
     env_param_path = "JSON/Environment/BaiNet1.json"
     env_para = parse_env_json(env_param_path)
-    test_param_path = "JSON/Testing/test1.json"
+    test_param_path = "JSON/Testing/test1000.json"
     test_args = parse_test_json(test_param_path)
     wandb_project = "DRL_For_SQN"
     wandb_entity = "jwigmore-research"
@@ -64,7 +69,9 @@ if __name__ == "__main__":
         artifact_name  = "jwigmore-research/DRL_For_SQN/BaiNet1_PPO-BaiNet.pt:v57"
 
 
-
+    if ENV_TEST:
+        from environment_init import make_MCMH_env
+        env = make_MCMH_env(env_para)()
 
 
     if wandb.run:
@@ -147,6 +154,30 @@ if __name__ == "__main__":
             pass
         run.finish()
 
+    if BAI_STATIC_TEST:
+        from testers import test_StaticPolicy_BaiNet
+
+        dt_string = datetime.now().strftime("%m-%d_%H%M")
+        run_name = f"TEST_SP_{env_para['name']}_{test_args.name}_{dt_string}"
+        tags, notes = get_user_input()
+
+        run = wandb.init(
+            project=wandb_project,
+            entity=wandb_entity,
+            job_type='Test',
+            name=run_name,
+            sync_tensorboard=True,
+            config=vars(test_args),
+            tags=tags,
+            notes=notes,
+            save_code=True,
+        )
+        all_rewards, test_history = test_StaticPolicy_BaiNet(run, env_para, test_args, device= 'cpu')
+        try:
+            add_final_notes(run)
+        except Exception:
+            pass
+        run.finish()
 
 
 

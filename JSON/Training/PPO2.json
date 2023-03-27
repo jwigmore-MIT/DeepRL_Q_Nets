@@ -1,6 +1,6 @@
 {
   "algo_parameters": {
-    "name": "PPO-cpdebug",
+    "name": "PPO2",
     "seed": 5031998,
     "torch_deterministic": true,
     "cuda": false,

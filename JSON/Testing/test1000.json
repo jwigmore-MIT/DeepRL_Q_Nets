@@ -1,10 +1,9 @@
 {
   "test_parameters": {
-    "name": "test1",
+    "name": "test_1000",
     "seed": 1010101,
-    "num_steps": 500,
+    "num_steps": 5000,
     "num_envs": 1,
-    "bp_n_episodes": 1,
     "cuda" : false
   }
 }
