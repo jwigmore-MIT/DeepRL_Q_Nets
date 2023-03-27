@@ -330,8 +330,9 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
     print("="*30)
     print("TESTING BEST AGENT FROM CURRENT TRAINING RUN")
     agent.load_state_dict(torch.load(checkpoint_saver.dirpath + f"manual_save.pt"))
-    test_rewards, test_history = agent_test(run, agent, env_para, test_args, store_history=True)
+    test_outputs = agent_test(run, agent, env_para, test_args, store_history=True)
     envs.close()
     writer.close()
     return {"Stopper": Stopper,
-            "Agent": agent}
+            "Agent": agent,
+            "test_outputs": test_outputs}
