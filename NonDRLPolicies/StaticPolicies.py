@@ -8,7 +8,7 @@ from torch import nn
 
 class BaiNetStaticPolicy(nn.Module):
 
-    def __init__(self, env, map_to_discrete = False, tianshou = False):
+    def __init__(self, env):
         super(BaiNetStaticPolicy, self).__init__()
         self.env = deepcopy(env)
         self.links = env.get_links()
@@ -47,3 +47,44 @@ class BaiNetStaticPolicy(nn.Module):
         0, 0, 3, 0, 0, 5, 0, 0, 5]])
 
         return flat_action[0,:]
+
+
+class CrissCross2StaticPolicy(nn.Module):
+    def __init__(self, env):
+        super(CrissCross2StaticPolicy, self).__init__()
+        self.env = deepcopy(env)
+        self.links = env.get_links()
+        self.action_format = env.get_action_format()
+
+    def forward(self, flat_state: np.ndarray, old_state= None):
+
+        f = self.env.get_action_format()
+        # Class 1
+        f[1,3][1] = 3
+        f[3,2][1] = 3
+        f[2,5][1] = 3
+
+        # Class 2
+        f[1,2][2] =2
+        f[2,6][2] = 3
+
+        # Class 3
+        f[1,3][3] = 1
+        f[3,7][3] = 2
+
+        # Class 4
+        f[1,4][4] = 2
+        f[1,3][4] = 1
+        f[4,8][4] = 3
+        f[3,4][4]= 2
+
+        #flat_f = self.env.flatten_action(f)
+        flat_f = np.array([[0, 2, 0, 0, 3, 0, 1, 1, 0, 0, 0, 2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 3,
+        0, 0, 3, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 3]])
+
+        return flat_f[0,:]
+
+
+
+
