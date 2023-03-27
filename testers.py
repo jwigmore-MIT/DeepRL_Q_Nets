@@ -12,7 +12,8 @@ import wandb
 # Custom imports
 from environment_init import make_MCMH_env
 from agent_init import Agent
-from wandb_utils import wandb_plot_avg_vs_time, wandb_plot_rewards_vs_time
+from wandb_utils import *
+from NonDRLPolicies.StaticPolicies import *
 
 
 def environment_test(env_para, test_length):
@@ -143,8 +144,9 @@ def agent_test(run, agent, env_para, test_args, store_history = True):
     fig = plot_performance_vs_time(np.array(all_rewards).T, "AGENT") # need to get policy name
     #wandb.log({"figure": wandb.Image(fig)})
     wandb_plot_rewards_vs_time(all_rewards, "AGENT")
+    q_dfs, q_df = wandb_test_qs_vs_time(test_history, merge=True)
 
-    return all_rewards, test_history
+    return {"all_rewards": all_rewards, "test_history": test_history, "q_df": q_df, "q_dfs": q_dfs}
 
 
 def test_BP(run, env_para, test_args, device='cpu', store_history=True):
@@ -219,14 +221,17 @@ def test_BP(run, env_para, test_args, device='cpu', store_history=True):
     fig = plot_performance_vs_time(np.array(all_rewards).T, "BP")  # need to get policy name
     # wandb.log({"figure": wandb.Image(fig)})
     wandb_plot_rewards_vs_time(all_rewards, "BP")
+    q_dfs, q_df =  wandb_test_qs_vs_time(test_history, merge= True)
 
-    return all_rewards, test_history
+    return {"all_rewards": all_rewards, "test_history":test_history, "q_df": q_df, "q_dfs": q_dfs}
 
 
-def test_StaticPolicy_BaiNet(run, env_para, test_args, device='cpu', store_history=True):
+def test_StaticPolicy(run, static_pol, env_para, test_args, device='cpu', store_history=True):
     from utils import plot_performance_vs_time
     from environment_init import make_MCMH_env
-    from NonDRLPolicies.BaiNetStaticPolicy import BaiNetStaticPolicy
+
+
+
     # Seeding
     random.seed(test_args.seed)
     np.random.seed(test_args.seed)
@@ -248,7 +253,12 @@ def test_StaticPolicy_BaiNet(run, env_para, test_args, device='cpu', store_histo
 
     # Initialize BP 'Agent'
     env = make_MCMH_env(env_para, max_steps=test_length, test = True)()
-    agent = BaiNetStaticPolicy(env)
+
+    # Selecting correct static policy
+    if static_pol == "BaiNet":
+        agent = BaiNetStaticPolicy(env)
+    elif static_pol == "CrissCross2":
+        agent = CrissCross2StaticPolicy(env)
 
     with torch.no_grad():
         for n_env in tqdm(range(n_envs), desc="Running Test on Static Policy Agent"):
@@ -295,5 +305,6 @@ def test_StaticPolicy_BaiNet(run, env_para, test_args, device='cpu', store_histo
     fig = plot_performance_vs_time(np.array(all_rewards).T, "Static Policy")  # need to get policy name
     # wandb.log({"figure": wandb.Image(fig)})
     wandb_plot_rewards_vs_time(all_rewards, "Static Policy")
+    q_dfs, q_df = wandb_test_qs_vs_time(test_history, merge=True)
 
-    return all_rewards, test_history
+    return {"all_rewards": all_rewards, "test_history": test_history, "q_df": q_df, "q_dfs": q_dfs}
