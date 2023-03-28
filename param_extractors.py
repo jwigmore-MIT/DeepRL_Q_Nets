@@ -31,6 +31,7 @@ def parse_training_json(json_path):
         setattr(args, key, value)
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
+    args.num_resets = args.total_timesteps /args.reset_steps # total number of new trajectories seen
     return args
 
 def parse_env_json(json_path):

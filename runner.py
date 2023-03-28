@@ -22,9 +22,7 @@ from wandb_utils import CheckpointSaver
 from trainers import train_agent
 
 
-def load_local_agent(agent_path):
 
-    agent.load_state_dict(torch.load(agent_path))
 
 
 def get_user_input():
@@ -46,10 +44,10 @@ def add_final_notes(run):
 
 ENV_TEST = True
 
-TRAIN = False
+TRAIN = True
 TEST = False
 BP_TEST = False
-STATIC_TEST = True
+STATIC_TEST = False
 
 
 #model_load_path = "/home/jwigmore/PycharmProjects/DRL_Stoch_Qs/clean_rl/Best_models/16.03_07_55_CrissCrossTwoClass__PPO_para_1__5031998"
@@ -63,7 +61,7 @@ STATIC_TEST = True
 '''
 if __name__ == "__main__":
     # Retrieve training, environment, and test parameters from json files
-    train_param_path = "JSON/Training/PPO2.json"
+    train_param_path = "JSON/Training/PPO-CC2.json"
     train_name = train_param_path.split("/")[-1].replace(".json","")
     train_args = parse_training_json(train_param_path)
 
@@ -71,7 +69,7 @@ if __name__ == "__main__":
     env_name = env_param_path.split("/")[-1].replace(".json","")
     env_para = parse_env_json(env_param_path)
 
-    test_param_path = "JSON/Testing/test-BP-Stability.json"
+    test_param_path = "JSON/Testing/test-CC2.json"
     test_name = test_param_path.split("/")[-1].replace(".json","")
     test_args = parse_test_json(test_param_path)
 
