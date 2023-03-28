@@ -82,7 +82,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
 
     # Initialize the environments
     envs = gym.vector.SyncVectorEnv(
-        [make_MCMH_env(env_para, max_steps = train_args.num_steps, test = False) for i in range(train_args.num_envs)]
+        [make_MCMH_env(env_para, max_steps = train_args.reset_steps/train_args.num_envs, test = False) for i in range(train_args.num_envs)]
     )
 
     # Initialize agents and pass agents (nn.module) to device
@@ -96,7 +96,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((train_args.num_steps, train_args.num_envs) + envs.single_observation_space.shape).to(device)
-    actions = torch.zeros((train_args.num_steps, train_args.num_envs) + envs.single_action_space.shape).to(device)
+    uc_actions = torch.zeros((train_args.num_steps, train_args.num_envs) + envs.single_action_space.shape).to(device) #UNCLIPPED actions
     logprobs = torch.zeros((train_args.num_steps, train_args.num_envs)).to(device)
     rewards = torch.zeros((train_args.num_steps, train_args.num_envs)).to(device)
     dones = torch.zeros((train_args.num_steps, train_args.num_envs)).to(device)
@@ -132,7 +132,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                     For all environments, we collect a rollout of length train_args.num_steps, and record for each (env,step)
                     a. obs - state which is input into the policy and value networks
                     b. dones - if the environment was terminated/truncated
-                    c. action - action output by policy function
+                    c. uc_action - UNCLIPPED action output by policy function
                     d. logpob - log probability of taking said action i.e. log \pi(a_t|s_t)
                     e. value - value network output i.e. v(s_t)
                     f. reward - observed rewards
@@ -147,13 +147,13 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
 
                     # ALGO LOGIC: action logic
                     with torch.no_grad():
-                        action, logprob, _, value = agent.get_action_and_value(next_obs)
+                        uc_action, logprob, _, value = agent.get_action_and_value(next_obs)
                         values[step] = value.flatten()
-                    actions[step] = action
+                    uc_actions[step] = uc_action
                     logprobs[step] = logprob
 
                     # TRY NOT TO MODIFY: execute the game and log data.
-                    next_obs, reward, terminated, truncated, infos = envs.step(action.cpu().numpy())
+                    next_obs, reward, terminated, truncated, infos = envs.step(uc_action.cpu().numpy())
                     done = np.logical_or(terminated, truncated)
                     rewards[step] = torch.tensor(reward).to(device).view(-1)
                     next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
@@ -228,38 +228,52 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                 # flatten the batch
                 b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
                 b_logprobs = logprobs.reshape(-1)
-                b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
+                b_actions = uc_actions.reshape((-1,) + envs.single_action_space.shape)
                 b_advantages = advantages.reshape(-1)
-                b_returns = returns.reshape(-1)
+                b_returns = returns.reshape(-1) #
                 b_values = values.reshape(-1)
 
                 # Optimizing the policy and value network
                 b_inds = np.arange(train_args.batch_size)
                 clipfracs = []
                 for epoch in range(train_args.update_epochs):
+                    # Shuffle the batch indices
                     np.random.shuffle(b_inds)
+
+                    # Loop through 'start' indices -> (0, minibatch_size, 2*minibatch_size, ...)
                     for start in range(0, train_args.batch_size, train_args.minibatch_size):
+                        # Get end index
                         end = start + train_args.minibatch_size
+
+                        # All minibatch indices
                         mb_inds = b_inds[start:end]
 
+                        # Pass minibatch observations and actions into the policy and value networks
+                        # Computes log probability, entropy, and value estimate for the (s,a) pairs
                         _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
+
+                        # Compute log-ratio and ration based on the old policy (b_logprobs[mb_inds])) \
+                        # and any updates to the policy network since obtaining the data (newlogprob)
                         logratio = newlogprob - b_logprobs[mb_inds]
                         ratio = logratio.exp()
 
+                        # Approximate the kl divergence between the old_policy and updated policy, and
+                        # compute the fraction of training data that triggered clipping ratios for the policy network
                         with torch.no_grad():
                             # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                            old_approx_kl = (-logratio).mean()
-                            approx_kl = ((ratio - 1) - logratio).mean()
+                            old_approx_kl = (-logratio).mean()  #k1 in above blog
+                            approx_kl = ((ratio - 1) - logratio).mean() #k2 in above blog
                             clipfracs += [((ratio - 1.0).abs() > train_args.clip_coef).float().mean().item()]
 
+                        # Get minibatch advantages and normalize if required
                         mb_advantages = b_advantages[mb_inds]
                         if train_args.norm_adv:
                             mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
                         # Policy loss
-                        pg_loss1 = -mb_advantages * ratio
-                        pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - train_args.clip_coef, 1 + train_args.clip_coef)
-                        pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+                        pg_loss1 = -mb_advantages * ratio # unclipped loss
+                        pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - train_args.clip_coef, 1 + train_args.clip_coef) # clipped loss
+                        pg_loss = torch.max(pg_loss1, pg_loss2).mean() # take the maximum of the negative losses (i.e. the minimum)
 
                         # Value loss
                         newvalue = newvalue.view(-1)
@@ -287,9 +301,14 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                     if eval(train_args.target_kl) is not None:
                         if approx_kl > train_args.target_kl:
                             break
-
+                """
+                y_pred: output of value network
+                y_true: true value function
+                """
                 y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
                 var_y = np.var(y_true)
+                diff_y = y_true-y_pred
+                abs_diff_y = np.abs(diff_y)
                 explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
                 # TRY NOT TO MODIFY: record rewards for plotting purposes
@@ -298,11 +317,15 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                     "train/SPS": int(train_steps / (time.time() - start_time)),
                     "losses/value_loss": v_loss.item(),
                     "losses/policy_loss": pg_loss.item(),
+                    # "losses/policy_loss1": pg_loss1.mean().item(),
+                    # "losses/policy_loss2": pg_loss2.mean().item(),
                     "losses/entropy": entropy_loss.item(),
-                    "losses/old_approx_kl": old_approx_kl.item(),
-                    "losses/approx_kl": approx_kl.item(),
+                    "losses/approx_kl1": old_approx_kl.item(),
+                    "losses/approx_kl2": approx_kl.item(),
                     "losses/clipfrac": np.mean(clipfracs),
-                    "losses/explained_variance": explained_var
+                    "misc/abs_diff_y": abs_diff_y.mean(),
+                    "misc/explained_variance": explained_var,
+                    "misc/var_y_true": var_y
 
                 })
 
