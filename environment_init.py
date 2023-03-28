@@ -36,6 +36,20 @@ def make_MCMH_env(env_para, max_steps = None, test = False):
         def action(self, action: np.ndarray):
             return self.unflatten_action(action)
 
+    class LongTermAverageRewardWrapper(gym.RewardWrapper):
+
+        def __init__(self, env, max_steps):
+            super().__init__(env)
+            self.t = 0
+            self.max_steps = max_steps
+
+        def reward(self, reward):
+            if self.t >= self.max_steps:
+                self.t = 0
+            self.t +=1
+            return reward/self.t
+
+
     def thunk():
         env = MultiClassMultiHop(env_para)
         if max_steps is not None:
@@ -48,7 +62,8 @@ def make_MCMH_env(env_para, max_steps = None, test = False):
         #env = gym.wrappers.NormalizeObservation(env)
         #env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
         if not test:
-            env = gym.wrappers.NormalizeReward(env, gamma=0.99)
+            env = LongTermAverageRewardWrapper(env, max_steps)
+            #env = gym.wrappers.NormalizeReward(env, gamma=0.99)
         #env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         return env
 
