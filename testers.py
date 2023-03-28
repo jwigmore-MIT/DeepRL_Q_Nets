@@ -63,8 +63,9 @@ def test_from_artifact(run, test_args, env_para, artifact, store_history = True)
     env = gym.vector.SyncVectorEnv([make_MCMH_env(env_para,max_steps = test_args.num_steps)])
     agent = Agent(env)
     agent.load_state_dict(state_dict=model_dict)
-    all_rewards, test_history = agent_test(run, agent, env_para, test_args)
-    return agent, all_rewards, test_history
+    test_output= agent_test(run, agent, env_para, test_args)
+    test_output["agent"] = agent
+    return test_output
 
 def agent_test(run, agent, env_para, test_args, store_history = True):
     from utils import plot_performance_vs_time
@@ -104,42 +105,57 @@ def agent_test(run, agent, env_para, test_args, store_history = True):
             next_obs = torch.Tensor(next_obs).to(device)
             if store_history:
                 state_keys = env.envs[0].unwrapped.get_flat_obs_keys()
+                p_action_keys = env.envs[0].unwrapped.get_flat_action_keys(mod="P")
                 action_keys = env.envs[0].unwrapped.get_flat_action_keys(mod='A')
-                flow_keys = env.envs[0].unwrapped.get_flat_action_keys(mod="F")
+                flow_keys = env.envs[0].unwrapped.get_flat_action_keys(mod="Fa")
+                flow_diff_keys = env.envs[0].unwrapped.get_flat_action_keys(mod="D")
                 arrival_keys = env.envs[0].unwrapped.get_flat_arrival_keys(mod="V")
                 obs = np.zeros([test_length, env.single_observation_space.shape[0]])
-                actions = np.zeros([test_length, env.single_action_space.shape[0]])
-                flows = np.zeros([test_length, env.single_action_space.shape[0]])
+                p_actions = np.zeros(
+                    [test_length, env.single_action_space.shape[0]])  # unclipped policy actions (policy network output)
+                actions = np.zeros([test_length, env.single_action_space.shape[0]])  # clipped actions (env action clipping)
+                flows = np.zeros(
+                    [test_length, env.single_action_space.shape[0]])  # served flows (from constraints in env._serve())
+                flow_diff = np.zeros(
+                    [test_length, env.single_action_space.shape[0]])  # difference between served flows and clipped actions
                 arrivals = np.zeros([test_length, len(arrival_keys)])
                 test_history["Env_seeds"].append(test_seed)
             for t in range(test_length):
                 if store_history:
                     obs[t] = np.array(next_obs)
-                action, logprob, _, value  = agent.get_action_and_value(next_obs)
-                next_obs, reward, terminated, truncated, info = env.step(action.cpu().numpy())
+                agent_action, logprob, _, value  = agent.get_action_and_value(next_obs)
+                next_obs, reward, terminated, truncated, info = env.step(agent_action.cpu().numpy())
 
                 if store_history:
                     if "final_info" in info:
                         # info won't contain flows nor arrivals
                         pass
                     else:
+                        actions[t] = info["action"][-1]
                         flows[t] = info['flows'][-1]
+                        flow_diff[t] = flows[t] - actions[t]
                         arrivals[t] = info['arrivals'][-1]
-                    actions[t] = action
+
+                    p_actions[t] = agent_action
 
                 all_rewards[t, n_env] = reward[-1]
                 next_obs = torch.Tensor(next_obs).to(device)
             if store_history:
-                pd_rewards = pd.DataFrame(np.array(all_rewards[:,n_env]), columns=['rewards'])
+                pd_rewards = pd.DataFrame(np.array(all_rewards[:, n_env]), columns=['rewards'])
                 pd_obs = pd.DataFrame(np.array(obs),
                                       columns=state_keys)
+                pd_p_actions = pd.DataFrame(np.array(p_actions),
+                                            columns=p_action_keys)
                 pd_actions = pd.DataFrame(np.array(actions),
                                           columns=action_keys)
                 pd_flows = pd.DataFrame(np.array(flows),
                                         columns=flow_keys)
+                pd_flow_diff = pd.DataFrame(np.array(flow_diff),
+                                            columns=flow_diff_keys)
                 pd_arrivals = pd.DataFrame(np.array(arrivals),
                                            columns=arrival_keys)
-                test_history[n_env] = pd.concat([pd_rewards, pd_obs, pd_actions, pd_flows, pd_arrivals], axis=1)
+                test_history[n_env] = pd.concat(
+                    [pd_rewards, pd_obs, pd_p_actions, pd_actions, pd_flows, pd_flow_diff, pd_arrivals], axis=1)
 
     fig = plot_performance_vs_time(np.array(all_rewards).T, "AGENT") # need to get policy name
     #wandb.log({"figure": wandb.Image(fig)})
@@ -266,41 +282,53 @@ def test_StaticPolicy(run, static_pol, env_para, test_args, device='cpu', store_
             next_obs, _ = env.reset(seed=test_seed)
             if store_history:
                 state_keys = env.get_flat_obs_keys()
+                p_action_keys = env.get_flat_action_keys(mod = "P")
                 action_keys = env.get_flat_action_keys(mod='A')
-                flow_keys = env.get_flat_action_keys(mod="F")
+                flow_keys = env.get_flat_action_keys(mod="Fa")
+                flow_diff_keys = env.get_flat_action_keys(mod="D")
                 arrival_keys = env.get_flat_arrival_keys(mod="V")
                 obs = np.zeros([test_length, env.observation_space.shape[0]])
-                actions = np.zeros([test_length, env.action_space.shape[0]])
-                flows = np.zeros([test_length, env.action_space.shape[0]])
+                p_actions = np.zeros([test_length, env.action_space.shape[0]]) # unclipped policy actions (policy network output)
+                actions = np.zeros([test_length, env.action_space.shape[0]]) # clipped actions (env action clipping)
+                flows = np.zeros([test_length, env.action_space.shape[0]]) # served flows (from constraints in env._serve())
+                flow_diff = np.zeros([test_length, env.action_space.shape[0]]) # difference between served flows and clipped actions
                 arrivals = np.zeros([test_length, len(arrival_keys)])
                 test_history["Env_seeds"].append(test_seed)
 
             for t in range(test_length):
                 if store_history:
                     obs[t] = next_obs
-                action = agent.forward(next_obs)
-                next_obs, reward, terminated, truncated, info = env.step(action)
+                agent_action = agent.forward(next_obs)
+                next_obs, reward, terminated, truncated, info = env.step(agent_action)
 
                 if store_history:
                     if "final_info" in info:
                         # info won't contain flows nor arrivals
                         pass
                     else:
+                        actions[t] = info["action"][-1]
                         flows[t] = info['flows'][-1]
+                        flow_diff[t] = flows[t] - actions[t]
                         arrivals[t] = info['arrivals'][-1]
-                    actions[t] = action
+
+                    p_actions[t] = agent_action
+
                     all_rewards[t, n_env] = reward[-1]
                 if store_history:
                     pd_rewards = pd.DataFrame(np.array(all_rewards[:, n_env]), columns=['rewards'])
                     pd_obs = pd.DataFrame(np.array(obs),
                                           columns=state_keys)
+                    pd_p_actions = pd.DataFrame(np.array(p_actions),
+                                              columns=p_action_keys)
                     pd_actions = pd.DataFrame(np.array(actions),
                                               columns=action_keys)
                     pd_flows = pd.DataFrame(np.array(flows),
                                             columns=flow_keys)
+                    pd_flow_diff = pd.DataFrame(np.array(flow_diff),
+                                            columns=flow_diff_keys)
                     pd_arrivals = pd.DataFrame(np.array(arrivals),
                                                columns=arrival_keys)
-                    test_history[n_env] = pd.concat([pd_rewards, pd_obs, pd_actions, pd_flows, pd_arrivals], axis=1)
+                    test_history[n_env] = pd.concat([pd_rewards, pd_obs, pd_p_actions, pd_actions, pd_flows, pd_flow_diff, pd_arrivals], axis=1)
 
     fig = plot_performance_vs_time(np.array(all_rewards).T, "Static Policy")  # need to get policy name
     # wandb.log({"figure": wandb.Image(fig)})
