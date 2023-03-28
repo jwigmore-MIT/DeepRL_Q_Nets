@@ -1,0 +1,11 @@
+TRAIN: True
+TEST: False
+BP_TEST: False
+STATIC_TEST: False
+train_param_path: "JSON/Training/PPO-quick.json"
+env_param_path: "JSON/Environment/CrissCross2.json"
+test_param_path: "JSON/Testing/test-quick.json"
+wandb_project:"Scheduling_Routing_DRL"
+wandb_entity: "jwigmore-research"
+artifact_name: "jwigmore-research/DRL_For_SQN/BaiNet1_PPO-BaiNet.pt"
+artifact_version: "v57"

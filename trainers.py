@@ -82,7 +82,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
 
     # Initialize the environments
     envs = gym.vector.SyncVectorEnv(
-        [make_MCMH_env(env_para, max_steps = train_args.reset_steps, test = False) for i in range(train_args.num_envs)]
+        [make_MCMH_env(env_para, max_steps = train_args.num_steps, test = False) for i in range(train_args.num_envs)]
     )
 
     # Initialize agents and pass agents (nn.module) to device
@@ -128,7 +128,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                     optimizer.param_groups[0]["lr"] = lrnow
                 ## (1) COLLECT ROLLOUT
                 '''
-                STEP (1): ROLLOUT PHASE
+                STEP (1): COLLECT ROLLLOUT
                     For all environments, we collect a rollout of length train_args.num_steps, and record for each (env,step)
                     a. obs - state which is input into the policy and value networks
                     b. dones - if the environment was terminated/truncated
@@ -138,9 +138,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                     f. reward - observed rewards
                 '''
                 # Note: each `step` corresponds to a step in all parallel environments run simultaneously
-                # num_steps: number of steps PER ROLLOUT (M)
-                # At end of this loop, we will have N*M new (S,A,R) tuples due to the vectorized N environments
-                for step in range(0, train_args.num_steps):
+                for step in range(0, train_args.num_steps): # num_steps: number of steps PER ROLLOUT
                     global_step += 1 * train_args.num_envs
                     train_steps += 1 * train_args.num_envs
                     wandb.log({"train/step":train_steps})
@@ -202,11 +200,9 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                     #                   "best_overall_score": best_scores[0]}
                     #                  )
 
-                    stop = Stopper.update(avg_LTA_reward)
-
-
+                    #stop = Stopper.update(avg_LTA_reward)
                 """
-                STEP (2): UPDATE PHASE 
+                STEP (2): COMPUTE LOSSES AND GRADIENTS FROM ROLLOUT DATA
                 """
 
                 with torch.no_grad():

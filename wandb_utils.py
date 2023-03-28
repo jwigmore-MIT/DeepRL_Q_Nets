@@ -20,7 +20,7 @@ class CheckpointSaver:
         Models should be saved to Saved_Models\\{env_para['name']}\\{training_args.name}\\
         And have the file_name '{self.env_string}_{self.algo_string}_s{metric_val}.pt'
 
-        Only 5 total models should be saved for each environment/training args combination
+        Only 5 total models should be saved for each environment/training args1 combination
 
         Each artifact should include the metric score and epoch in the metadata
 
