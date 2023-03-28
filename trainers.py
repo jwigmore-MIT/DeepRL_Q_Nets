@@ -88,7 +88,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
 
     # Initialize the environments
     envs = gym.vector.SyncVectorEnv(
-        [make_MCMH_env(env_para, max_steps = train_args.reset_steps/train_args.num_envs, test = False) for i in range(train_args.num_envs)]
+        [make_MCMH_env(env_para, max_steps = train_args.reset_steps_per_env, test = False) for i in range(train_args.num_envs)]
     )
 
     # Initialize agents and pass agents (nn.module) to device
