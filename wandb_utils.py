@@ -87,7 +87,10 @@ class CheckpointSaver:
         to_remove = all_model_paths[self.top_n:]
         #logging.info(f"Removing extra models.. {to_remove}")
         for o in to_remove:
-            os.remove(o)
+            try:
+                os.remove(o)
+            except FileNotFoundError:
+                pass
             del self.top_model_paths[o]
         #self.top_model_paths = self.top_model_paths[:self.top_n]
 
