@@ -41,6 +41,8 @@ class MultiClassMultiHop(gym.Env):
         # topology information
         self.nodes = eval(net_para['nodes'])  # nodes <list>
         self.links = [tuple(link) for link in eval(net_para['links'])] # observable links <list> of <tup>
+        self.graph = self._make_graph()
+        self.reachable_nodes = self.create_reachable()
         self.capacities_fcn = self._extract_capacities(net_para['capacities'])
 
 
@@ -97,11 +99,61 @@ class MultiClassMultiHop(gym.Env):
         flat_obs_space = spaces.utils.flatten_space(self.observation_space)
         self.obs_space_size = flat_obs_space.shape[0]  # the size of the state space
 
+        self.max_actions = self.limit_actions()
+
         self.action_space = spaces.Dict(
-            {link: spaces.Dict({cls: spaces.Box(low=0, high=bern_rv.num, dtype=int) for cls in self.classes.keys()}) for
-             link, bern_rv in self.capacities_fcn.items()})
+            {link: spaces.Dict({cls: spaces.Box(low=0, high=self.max_actions[link][cls], dtype=int) for cls in self.classes.keys()}) for
+             link, class_dict in self.max_actions.items()})
+
+    def _make_graph(self):
+        graph = {}
+        for node in self.nodes:
+            graph[node] = []
+
+        for link in self.links:
+            graph[link[0]].append(link[1])
+
+        return graph
+
+    def compute_reachable_nodes(self, start_node):
+        def traverse(node, visited: set):
+            visited.add(node)
+            for neighbor in self.graph[node]:
+                if neighbor not in visited:
+                    traverse(neighbor, visited)
+        visited = set()
+        traverse(start_node, visited)
+        return visited
+
+    def create_reachable(self):
+        reachable_nodes = {}
+        for node in self.nodes:
+            reachable_nodes[node] = self.compute_reachable_nodes(node)
+        return reachable_nodes
 
 
+    """
+    Actions correspond to flows on links
+    In order to determine if an action f(i,j,k) is valid, we need to see if the destination node of class k is reachable from node j
+    """
+
+    def limit_actions(self):
+        """
+        Input: action_format
+               reachable_nodes_dict
+        """
+        max_action = {}
+        for link, class_dict in self.action_format.items():
+            j = link[1]
+            j_reach = self.reachable_nodes[j]
+            max_action[link] = {}
+            for cls, value in class_dict.items():
+                cls_dest = self.classes[cls][1]
+                if cls_dest not in j_reach:
+                    max_action[link][cls] = 0
+                else:
+                    max_action[link][cls] = self.capacities_fcn[link].num
+        return max_action
 
 
 
@@ -307,6 +359,9 @@ class MultiClassMultiHop(gym.Env):
 
         return arrival_keys
 
+    # For getting valid actions
+
+
 
 
 # longest connected queue is served for each link
@@ -393,7 +448,7 @@ def init_continuous_env(para, train = True):
     :return: an MCMH environment for the Backpressure policy
     """
 
-    env = BaseMultiClassMultiHop(para['problem_instance'])
+    env = MultiClassMultiHop(para['problem_instance'])
     if train:
         max_episode_steps = para['train_parameters']["episode_length"]
     else:
@@ -403,7 +458,7 @@ def init_continuous_env(para, train = True):
     return env
 
 def init_discrete_env(para, train = True):
-    env = BaseMultiClassMultiHop(para['problem_instance'])
+    env = MultiClassMultiHop(para['problem_instance'])
     if train:
         max_episode_steps = para['train_parameters']["episode_length"]
     else:
