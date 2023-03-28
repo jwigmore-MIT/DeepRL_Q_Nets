@@ -44,9 +44,139 @@ def add_final_notes(run):
     run.notes = new_notes
 
 
-ENV_TEST = True
 
+def read_args_file():
+    args1 = defaultdict(None)
 
+    # open the text file for reading
+    with open('run_settings.txt', 'r') as f:
+        # read the contents of the file
+        contents = f.read()
+
+        # split the contents by newline to get individual lines
+        lines = contents.split('\n')
+        # lines = re.split(r':(?=")', contents)
+        # iterate over each line
+        for line in lines:
+            # split the line by colon to get the argument and value
+            parts = line.split(':')
+            arg = parts[0].strip()
+            if arg == '':
+                continue
+            value = parts[1].strip()
+
+            # add the argument and value to the dictionary
+            args1[arg] = eval(value)
+
+        # set the command line arguments to the values from the dictionary
+        # sys.argv = [sys.argv[0]] + list(args1.values())
+    return args1
+
+def run_train():
+    if TRAIN:
+        dt_string = datetime.now().strftime("%m-%d_%H%M")
+        run_name = f"TRAIN_{env_name}_{train_name}_{dt_string}"
+        tags, notes = get_user_input()
+
+        run = wandb.init(
+            project=wandb_project,
+            entity=wandb_entity,
+            job_type='Train',
+            name=run_name,
+            sync_tensorboard=True,
+            config=vars(train_args),
+            tags = tags,
+            notes = notes,
+            save_code=True,
+        )
+
+        save_model_path = f"Saved_Models/{env_name}/{train_name}/"
+        checkpoint_saver = CheckpointSaver(save_model_path, env_string= env_name, algo_string=train_name, decreasing=False, top_n=5)
+
+        outputs = train_agent(env_para, train_args, test_args, run, checkpoint_saver)
+        try:
+            add_final_notes(run)
+        except Exception:
+            pass
+        run.finish()
+        return outputs
+
+def run_test():
+    dt_string = datetime.now().strftime("%m-%d_%H%M")
+    run_name = f"TEST_{env_name}_{test_name}_{dt_string}"
+    setattr(test_args, "artifact_name", artifact_name)
+    tags, notes = get_user_input()
+
+    run = wandb.init(
+        project=wandb_project,
+        entity=wandb_entity,
+        job_type='Test',
+        name=run_name,
+        sync_tensorboard=True,
+        config=vars(test_args),
+        tags=tags,
+        notes=notes,
+        save_code=True,
+    )
+    artifact = run.use_artifact(artifact_name, type='model')
+
+    test_outputs = test_from_artifact(run, test_args, env_para, artifact, store_history=True)
+    try:
+        add_final_notes(run)
+    except Exception:
+        pass
+    run.finish()
+    return test_outputs
+
+def run_BP_test():
+    dt_string = datetime.now().strftime("%m-%d_%H%M")
+    run_name = f"TEST_BP_{env_name}_{test_name}_{dt_string}"
+    tags, notes = get_user_input()
+
+    run = wandb.init(
+        project=wandb_project,
+        entity=wandb_entity,
+        job_type='Test',
+        name=run_name,
+        sync_tensorboard=True,
+        config=vars(test_args),
+        tags=tags,
+        notes=notes,
+        save_code=True,
+    )
+    test_outputs = test_BP(run, env_para, test_args, device='cpu')
+    try:
+        add_final_notes(run)
+    except Exception:
+        pass
+    run.finish()
+    return test_outputs
+
+def run_static_test():
+    from testers import test_StaticPolicy
+
+    dt_string = datetime.now().strftime("%m-%d_%H%M")
+    run_name = f"TEST_SP_{env_name}_{test_name}_{dt_string}"
+    tags, notes = get_user_input()
+
+    run = wandb.init(
+        project=wandb_project,
+        entity=wandb_entity,
+        job_type='Test',
+        name=run_name,
+        sync_tensorboard=True,
+        config=vars(test_args),
+        tags=tags,
+        notes=notes,
+        save_code=True,
+    )
+    test_outputs = test_StaticPolicy(run, static_pol, env_para, test_args, device='cpu')
+    try:
+        add_final_notes(run)
+    except Exception:
+        pass
+    run.finish()
+    return test_outputs
 
 #model_load_path = "/home/jwigmore/PycharmProjects/DRL_Stoch_Qs/clean_rl/Best_models/16.03_07_55_CrissCrossTwoClass__PPO_para_1__5031998"
 # https://www.reddit.com/r/reinforcementlearning/comments/11txwjw/agent_not_learning_3_problems_and_solutions/
@@ -58,33 +188,13 @@ ENV_TEST = True
 4. Static Stabilizing Policy
 '''
 if __name__ == "__main__":
+
+    ENV_TEST = True
+
+
     # Retrieve training, environment, and test parameters from json files
+    args1 = read_args_file()
 
-    import sys
-
-    # create an empty dictionary to store the arguments
-    args1 = defaultdict(None)
-
-    # open the text file for reading
-    with open('run_settings.txt', 'r') as f:
-        # read the contents of the file
-        contents = f.read()
-
-        # split the contents by newline to get individual lines
-        lines = contents.split('\n')
-        #lines = re.split(r':(?=")', contents)
-        # iterate over each line
-        for line in lines:
-            # split the line by colon to get the argument and value
-            parts = line.split(':')
-            arg = parts[0].strip()
-            value = parts[1].strip()
-
-            # add the argument and value to the dictionary
-            args1[arg] = eval(value)
-
-        # set the command line arguments to the values from the dictionary
-        #sys.argv = [sys.argv[0]] + list(args1.values())
 
     TRAIN = args1["TRAIN"]
     TEST = args1["TEST"]
@@ -121,105 +231,114 @@ if __name__ == "__main__":
         wandb.finish()
 
     if TRAIN:
-        dt_string = datetime.now().strftime("%m-%d_%H%M")
-        run_name = f"TRAIN_{env_name}_{train_name}_{dt_string}"
-        tags, notes = get_user_input()
-
-        run = wandb.init(
-            project=wandb_project,
-            entity=wandb_entity,
-            job_type='Train',
-            name=run_name,
-            sync_tensorboard=True,
-            config=vars(train_args),
-            tags = tags,
-            notes = notes,
-            save_code=True,
-        )
-
-        save_model_path = f"Saved_Models/{env_name}/{train_name}/"
-        checkpoint_saver = CheckpointSaver(save_model_path, env_string= env_name, algo_string=train_name, decreasing=False, top_n=5)
-
-        outputs = train_agent(env_para, train_args, test_args, run, checkpoint_saver)
-        try:
-            add_final_notes(run)
-        except Exception:
-            pass
-        run.finish()
-
+        train_outputs = run_train()
     if TEST:
-        dt_string = datetime.now().strftime("%m-%d_%H%M")
-        run_name = f"TEST_{env_name}_{test_name}_{dt_string}"
-        setattr(test_args,"artifact_name", artifact_name)
-        tags, notes = get_user_input()
-
-        run = wandb.init(
-            project=wandb_project,
-            entity=wandb_entity,
-            job_type='Test',
-            name=run_name,
-            sync_tensorboard=True,
-            config=vars(test_args),
-            tags = tags,
-            notes = notes,
-            save_code=True,
-        )
-        artifact = run.use_artifact(artifact_name, type='model')
-
-        test_outputs = test_from_artifact(run, test_args, env_para, artifact, store_history = True)
-        try:
-            add_final_notes(run)
-        except Exception:
-            pass
-        run.finish()
-
+        test_outputs = run_test()
     if BP_TEST:
-        dt_string = datetime.now().strftime("%m-%d_%H%M")
-        run_name = f"TEST_BP_{env_name}_{test_name}_{dt_string}"
-        tags, notes = get_user_input()
-
-        run = wandb.init(
-            project=wandb_project,
-            entity=wandb_entity,
-            job_type='Test',
-            name=run_name,
-            sync_tensorboard=True,
-            config=vars(test_args),
-            tags = tags,
-            notes = notes,
-            save_code=True,
-        )
-        test_outputs = test_BP(run, env_para, test_args, device= 'cpu')
-        try:
-            add_final_notes(run)
-        except Exception:
-            pass
-        run.finish()
-
+        BP_test_outputs = run_BP_test()
     if STATIC_TEST:
-        from testers import test_StaticPolicy
+        static_test_outputs = run_static_test()
 
-        dt_string = datetime.now().strftime("%m-%d_%H%M")
-        run_name = f"TEST_SP_{env_name}_{test_name}_{dt_string}"
-        tags, notes = get_user_input()
-
-        run = wandb.init(
-            project=wandb_project,
-            entity=wandb_entity,
-            job_type='Test',
-            name=run_name,
-            sync_tensorboard=True,
-            config=vars(test_args),
-            tags=tags,
-            notes=notes,
-            save_code=True,
-        )
-        test_outputs = test_StaticPolicy(run, static_pol, env_para, test_args, device= 'cpu')
-        try:
-            add_final_notes(run)
-        except Exception:
-            pass
-        run.finish()
+    # if False:
+    #     dt_string = datetime.now().strftime("%m-%d_%H%M")
+    #     run_name = f"TRAIN_{env_name}_{train_name}_{dt_string}"
+    #     tags, notes = get_user_input()
+    #
+    #     run = wandb.init(
+    #         project=wandb_project,
+    #         entity=wandb_entity,
+    #         job_type='Train',
+    #         name=run_name,
+    #         sync_tensorboard=True,
+    #         config=vars(train_args),
+    #         tags = tags,
+    #         notes = notes,
+    #         save_code=True,
+    #     )
+    #
+    #     save_model_path = f"Saved_Models/{env_name}/{train_name}/"
+    #     checkpoint_saver = CheckpointSaver(save_model_path, env_string= env_name, algo_string=train_name, decreasing=False, top_n=5)
+    #
+    #     outputs = train_agent(env_para, train_args, test_args, run, checkpoint_saver)
+    #     try:
+    #         add_final_notes(run)
+    #     except Exception:
+    #         pass
+    #     run.finish()
+    #
+    # if False:
+    #     dt_string = datetime.now().strftime("%m-%d_%H%M")
+    #     run_name = f"TEST_{env_name}_{test_name}_{dt_string}"
+    #     setattr(test_args,"artifact_name", artifact_name)
+    #     tags, notes = get_user_input()
+    #
+    #     run = wandb.init(
+    #         project=wandb_project,
+    #         entity=wandb_entity,
+    #         job_type='Test',
+    #         name=run_name,
+    #         sync_tensorboard=True,
+    #         config=vars(test_args),
+    #         tags = tags,
+    #         notes = notes,
+    #         save_code=True,
+    #     )
+    #     artifact = run.use_artifact(artifact_name, type='model')
+    #
+    #     test_outputs = test_from_artifact(run, test_args, env_para, artifact, store_history = True)
+    #     try:
+    #         add_final_notes(run)
+    #     except Exception:
+    #         pass
+    #     run.finish()
+    #
+    # if False:
+    #     dt_string = datetime.now().strftime("%m-%d_%H%M")
+    #     run_name = f"TEST_BP_{env_name}_{test_name}_{dt_string}"
+    #     tags, notes = get_user_input()
+    #
+    #     run = wandb.init(
+    #         project=wandb_project,
+    #         entity=wandb_entity,
+    #         job_type='Test',
+    #         name=run_name,
+    #         sync_tensorboard=True,
+    #         config=vars(test_args),
+    #         tags = tags,
+    #         notes = notes,
+    #         save_code=True,
+    #     )
+    #     test_outputs = test_BP(run, env_para, test_args, device= 'cpu')
+    #     try:
+    #         add_final_notes(run)
+    #     except Exception:
+    #         pass
+    #     run.finish()
+    #
+    # if False:
+    #     from testers import test_StaticPolicy
+    #
+    #     dt_string = datetime.now().strftime("%m-%d_%H%M")
+    #     run_name = f"TEST_SP_{env_name}_{test_name}_{dt_string}"
+    #     tags, notes = get_user_input()
+    #
+    #     run = wandb.init(
+    #         project=wandb_project,
+    #         entity=wandb_entity,
+    #         job_type='Test',
+    #         name=run_name,
+    #         sync_tensorboard=True,
+    #         config=vars(test_args),
+    #         tags=tags,
+    #         notes=notes,
+    #         save_code=True,
+    #     )
+    #     test_outputs = test_StaticPolicy(run, static_pol, env_para, test_args, device= 'cpu')
+    #     try:
+    #         add_final_notes(run)
+    #     except Exception:
+    #         pass
+    #     run.finish()
 
 
 
