@@ -18,7 +18,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
-from param_extractors import parse_training_json, parse_test_json, parse_env_json
+from param_extractors import parse_jsons
 from testers import test_from_artifact, test_BP
 from wandb_utils import CheckpointSaver
 from trainers import train_agent
@@ -84,7 +84,7 @@ def run_train():
             job_type='Train',
             name=run_name,
             sync_tensorboard=True,
-            config=vars(train_args),
+            config=vars(config_args),
             tags = tags,
             notes = notes,
             save_code=True,
@@ -113,7 +113,7 @@ def run_test():
         job_type='Test',
         name=run_name,
         sync_tensorboard=True,
-        config=vars(test_args),
+        config=vars(config_args),
         tags=tags,
         notes=notes,
         save_code=True,
@@ -139,7 +139,7 @@ def run_BP_test():
         job_type='Test',
         name=run_name,
         sync_tensorboard=True,
-        config=vars(test_args),
+        config=vars(config_args),
         tags=tags,
         notes=notes,
         save_code=True,
@@ -165,7 +165,7 @@ def run_static_test():
         job_type='Test',
         name=run_name,
         sync_tensorboard=True,
-        config=vars(test_args),
+        config=vars(config_args),
         tags=tags,
         notes=notes,
         save_code=True,
@@ -203,15 +203,17 @@ if __name__ == "__main__":
 
     train_param_path = args1["train_param_path"]
     train_name = train_param_path.split("/")[-1].replace(".json","")
-    train_args = parse_training_json(train_param_path)
+    # train_args = parse_training_json(train_param_path)
 
     env_param_path = args1["env_param_path"]
     env_name = env_param_path.split("/")[-1].replace(".json","")
-    env_para = parse_env_json(env_param_path)
+    # env_para = parse_env_json(env_param_path)
 
     test_param_path = args1["test_param_path"]
     test_name = test_param_path.split("/")[-1].replace(".json","")
-    test_args = parse_test_json(test_param_path)
+    # test_args = parse_test_json(test_param_path)
+
+    config_args, train_args, env_para, test_args = parse_jsons(train_param_path, env_param_path, test_param_path)
 
     static_pol = env_name
 
