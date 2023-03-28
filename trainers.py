@@ -1,5 +1,5 @@
 # Import libraries
-
+import os
 import time
 import wandb
 import random
@@ -57,9 +57,15 @@ class StopTrainingOnNoImprovement:
 
 
 
+def load_agent(agent, artifact):
+    model_weight_dir = artifact.download()
+    model_dict = {}
+    for x in os.listdir(model_weight_dir):
+        if x.endswith('.pt'):
+            model_dict = torch.load(os.path.join(model_weight_dir, x))
+    agent.load_state_dict(state_dict=model_dict)
 
-
-def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
+def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact = None):
 
 
 
@@ -88,6 +94,10 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
     # Initialize agents and pass agents (nn.module) to device
     agent = Agent(envs).to(device)
 
+    if artifact is not None:
+        load_agent(agent, artifact)
+
+
     # Watch the gradient
     wandb.watch(agent, log_freq = 100)
 
@@ -105,9 +115,11 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     train_steps = 0
+    update_steps = 0
     wandb.define_metric("train/step")
+    wandb.define_metric("train/update")
     wandb.define_metric("train/*", step_metric="train/step")
-    wandb.define_metric("losses/*", step_metric="train/step")
+    wandb.define_metric("losses/*", step_metric="train/update")
 
     start_time = time.time()
     next_obs, _ = envs.reset(seed=train_args.seed)  ## TODO: see what reset() normally returns
@@ -165,10 +177,12 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
 
                     sum_avg_eps_rewards = 0
                     sum_eps_returns = 0
+                    n_eps = 0
                     for info in infos["final_info"]:
                         # Skip the envs that are not done
                         if info is None:
                             continue
+                        n_eps += 1
                         average_eps_reward = info['episode']['r' ] /info['episode']['l']
                         sum_avg_eps_rewards += average_eps_reward
                         sum_eps_returns += info["episode"]["r"]
@@ -177,9 +191,8 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                             "train/episodic_length": info["episode"]["l"],
                             "train/episodic_average": average_eps_reward,
                         })
-                        # writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                        # writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
-                        # writer.add_scalar("charts/episodic_average", average_eps_reward , global_step)
+
+                    sum_avg_eps_rewards = sum_avg_eps_rewards/n_eps
                     avg_LTA_reward = sum_avg_eps_rewards /infos['_final_info'].sum()/info["episode"]["l"]
                     avg_eps_return = sum_avg_eps_rewards /infos['_final_info'].sum()
                     #pbar.update(update)
@@ -237,6 +250,8 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver):
                 b_inds = np.arange(train_args.batch_size)
                 clipfracs = []
                 for epoch in range(train_args.update_epochs):
+                    update_steps+=1
+                    wandb.log({"train/update":update_steps})
                     # Shuffle the batch indices
                     np.random.shuffle(b_inds)
 

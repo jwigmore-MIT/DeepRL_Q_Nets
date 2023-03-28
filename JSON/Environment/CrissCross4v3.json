@@ -8,8 +8,8 @@
       "1": {
         "source": 1,
         "destination": 4,
-        "arrival": 5,
-        "probability": 0.5
+        "arrival": 3,
+        "probability": 1
       },
       "2": {
         "source": 1,

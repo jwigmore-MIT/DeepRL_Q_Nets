@@ -101,6 +101,34 @@ def run_train():
         run.finish()
         return outputs
 
+def run_train_w_agent():
+    dt_string = datetime.now().strftime("%m-%d_%H%M")
+    run_name = f"RETRAIN_{env_name}_{train_name}_{dt_string}"
+    tags, notes = get_user_input()
+    setattr(train_args, "artifact_name", artifact_name)
+    run = wandb.init(
+        project=wandb_project,
+        entity=wandb_entity,
+        job_type='Retrain',
+        name=run_name,
+        sync_tensorboard=True,
+        config=vars(config_args),
+        tags=tags,
+        notes=notes,
+        save_code=True,
+    )
+    save_model_path = f"Saved_Models/{env_name}/{train_name}/"
+    checkpoint_saver = CheckpointSaver(save_model_path, env_string=env_name, algo_string=train_name, decreasing=False,
+                                       top_n=5)
+
+    artifact = run.use_artifact(artifact_name, type = "model")
+    outputs = train_agent(env_para, train_args, test_args, run, checkpoint_saver,artifact)
+    try:
+        add_final_notes(run)
+    except Exception:
+        pass
+    run.finish()
+    return outputs
 def run_test():
     dt_string = datetime.now().strftime("%m-%d_%H%M")
     run_name = f"TEST_{env_name}_{test_name}_{dt_string}"
@@ -197,6 +225,7 @@ if __name__ == "__main__":
 
 
     TRAIN = args1["TRAIN"]
+    RETRAIN = args1["RETRAIN"]
     TEST = args1["TEST"]
     BP_TEST = args1["BP_TEST"]
     STATIC_TEST = args1["STATIC_TEST"]
@@ -219,7 +248,7 @@ if __name__ == "__main__":
 
     wandb_project = args1["wandb_project"]
     wandb_entity = args1["wandb_entity"]
-    if TEST:
+    if TEST or RETRAIN:
         artifact_name  = args1["artifact_name"] + ":" + args1["artifact_version"]
 
 
@@ -234,6 +263,8 @@ if __name__ == "__main__":
 
     if TRAIN:
         train_outputs = run_train()
+    if RETRAIN:
+        train_outputs = run_train_w_agent()
     if TEST:
         test_outputs = run_test()
     if BP_TEST:
