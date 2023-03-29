@@ -156,15 +156,18 @@ def run_test():
     run.finish()
     return test_outputs
 
-def run_BP_test():
+def run_BP_test(M = False):
     dt_string = datetime.now().strftime("%m-%d_%H%M")
-    run_name = f"TEST_BP_{env_name}_{test_name}_{dt_string}"
+    if M:
+        run_name = f"TEST_BPM_{env_name}_{test_name}_{dt_string}"
+    else:
+        run_name = f"TEST_BP_{env_name}_{test_name}_{dt_string}"
     tags, notes = get_user_input()
 
     run = wandb.init(
         project=wandb_project,
         entity=wandb_entity,
-        job_type='Test',
+        job_type='BP_Test',
         name=run_name,
         sync_tensorboard=True,
         config=vars(config_args),
@@ -172,7 +175,7 @@ def run_BP_test():
         notes=notes,
         save_code=True,
     )
-    test_outputs = test_BP(run, env_para, test_args, device='cpu')
+    test_outputs = test_BP(run, env_para, test_args,M = M, device='cpu')
     try:
         add_final_notes(run)
     except Exception:
@@ -228,6 +231,7 @@ if __name__ == "__main__":
     RETRAIN = args1["RETRAIN"]
     TEST = args1["TEST"]
     BP_TEST = args1["BP_TEST"]
+    BPM_TEST = args1["BPM_TEST"]
     STATIC_TEST = args1["STATIC_TEST"]
 
     train_param_path = args1["train_param_path"]
@@ -268,7 +272,9 @@ if __name__ == "__main__":
     if TEST:
         test_outputs = run_test()
     if BP_TEST:
-        BP_test_outputs = run_BP_test()
+        BP_test_outputs = run_BP_test(M = False)
+    if BPM_TEST:
+        BPM_test_outputs = run_BP_test(M = True)
     if STATIC_TEST:
         static_test_outputs = run_static_test()
 
