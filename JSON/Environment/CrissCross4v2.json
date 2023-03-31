@@ -1,6 +1,6 @@
 {
   "problem_instance": {
-    "name": "CrissCross2",
+    "name": "CrissCross4v2",
     "notes": "M = 7, K = 2 -> |F| = 14+ Load = 4.5",
     "nodes": "[1, 2, 3, 4, 5]",
     "links": "[[1,2], [1,3], [2,4], [2,3], [2,5], [3,5], [3,2]]",
@@ -8,7 +8,7 @@
       "1": {
         "source": 1,
         "destination": 4,
-        "arrival": 5,
+        "arrival": 4,
         "probability": 0.5
       },
       "2": {

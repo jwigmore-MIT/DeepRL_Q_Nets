@@ -11,11 +11,13 @@ from torch import nn
 class MCMHBackPressurePolicy(nn.Module):
 
     # initialization
-    def __init__(self, env, map_to_discrete = False, tianshou = False):
+    def __init__(self, env, M = False, map_to_discrete = False, tianshou = False):
         super(MCMHBackPressurePolicy, self).__init__()
         self.env = deepcopy(env)
         self.links = env.get_links()
         self.action_format = env.get_action_format()
+        self.modified = M
+        self.max_action = env.max_actions
         self.map_to_discrete = map_to_discrete
         self.mu = {} # transmission variable for each link (i.e. total flow)
         for link in self.links:
@@ -89,6 +91,8 @@ class MCMHBackPressurePolicy(nn.Module):
             diff = {}
             for cls, amt in Q_i.items():
                 diff[cls] = Q_i[cls] - Q_j[cls]
+                if self.modified and self.max_action[link][cls] == 0:
+                    diff[cls] = -np.inf
             opt_cls = max(diff, key=diff.get)  # optimal class
             #opt_ij[self.tup_str_to_tup_int(link)] = (opt_cls, max(diff[opt_cls], 0))
             opt_ij[link] = (opt_cls, max(diff[opt_cls], 0))

@@ -165,7 +165,7 @@ def agent_test(run, agent, env_para, test_args, store_history = True):
     return {"all_rewards": all_rewards, "test_history": test_history, "q_df": q_df, "q_dfs": q_dfs}
 
 
-def test_BP(run, env_para, test_args, device='cpu', store_history=True):
+def test_BP(run, env_para, test_args, M = False, device='cpu', store_history=True):
     from utils import plot_performance_vs_time
     from environment_init import make_MCMH_env
 
@@ -190,7 +190,7 @@ def test_BP(run, env_para, test_args, device='cpu', store_history=True):
 
     # Initialize BP 'Agent'
     env = make_MCMH_env(env_para, max_steps=test_length, test = True)()
-    agent = MCMHBackPressurePolicy(env)
+    agent = MCMHBackPressurePolicy(env, M = M)
 
     with torch.no_grad():
         for n_env in tqdm(range(n_envs), desc="Running Test on BP Agent"):

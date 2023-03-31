@@ -1,12 +1,13 @@
-TRAIN: True
+TRAIN: False
 RETRAIN: False
 TEST: False
 BP_TEST: False
+BPM_TEST: True
 STATIC_TEST: False
 train_param_path: "JSON/Training/PPO-CC4v3.json"
-env_param_path: "JSON/Environment/CrissCross2v3.json"
-test_param_path: "JSON/Testing/test-CC4.json"
-wandb_project:"Scheduling_Routing_DRL"
+env_param_path: "JSON/Environment/CrissCross4v3.json"
+test_param_path: "JSON/Testing/test-BP-Stability.json"
+wandb_project:"Scheduling_Routing_DRLv2"
 wandb_entity: "jwigmore-research"
 artifact_name: "jwigmore-research/Scheduling_Routing_DRL/CrissCross4_PPO-CC4.pt"
 artifact_version: "v118"
