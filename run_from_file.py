@@ -45,11 +45,11 @@ def add_final_notes(run):
 
 
 
-def read_args_file():
+def read_args_file(args_file):
     args1 = defaultdict(None)
 
     # open the text file for reading
-    with open('run_settings.txt', 'r') as f:
+    with open(args_file, 'r') as f:
         # read the contents of the file
         contents = f.read()
 
@@ -221,7 +221,7 @@ if __name__ == "__main__":
 
 
     # Retrieve training, environment, and test parameters from json files
-    args1 = read_args_file()
+    args1 = read_args_file('bc_run_settings.txt')
 
 
     TRAIN = args1["TRAIN"]
