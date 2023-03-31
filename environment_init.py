@@ -22,7 +22,7 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
 
     return thunk
 
-def make_MCMH_env(env_para, max_steps = None, test = False):
+def make_MCMH_env(env_para, max_steps = None, time_scaled = False):
     class FlatActionWrapper(gym.ActionWrapper):
         """
         This action wrapper maps flattened actions <nd.array> back to dictionary
@@ -61,7 +61,7 @@ def make_MCMH_env(env_para, max_steps = None, test = False):
         env = gym.wrappers.ClipAction(env)
         #env = gym.wrappers.NormalizeObservation(env)
         #env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
-        if not test:
+        if time_scaled:
             env = LongTermAverageRewardWrapper(env, max_steps)
             #env = gym.wrappers.NormalizeReward(env, gamma=0.99)
         #env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
