@@ -65,7 +65,7 @@ def load_agent(agent, artifact):
             model_dict = torch.load(os.path.join(model_weight_dir, x))
     agent.load_state_dict(state_dict=model_dict)
 
-def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact = None):
+def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact = None, sweep = False):
 
 
 
@@ -88,7 +88,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
 
     # Initialize the environments
     envs = gym.vector.SyncVectorEnv(
-        [make_MCMH_env(env_para, max_steps = train_args.reset_steps_per_env, time_scaled = train_args.time_scaled) for i in range(train_args.num_envs)]
+        [make_MCMH_env(env_para, max_steps = train_args.reset_steps, time_scaled = train_args.time_scaled) for i in range(train_args.num_envs)]
     )
 
     # Initialize agents and pass agents (nn.module) to device
@@ -147,9 +147,10 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                     c. uc_action - UNCLIPPED action output by policy function
                     d. logpob - log probability of taking said action i.e. log \pi(a_t|s_t)
                     e. value - value network output i.e. v(s_t)
-                    f. reward - observed rewards
+                    f. reward - observed rewards 
                 '''
                 # Note: each `step` corresponds to a step in all parallel environments run simultaneously
+                # Parameter in train_args json is "num_steps_per_env" and the num_steps used below is num_steps_per_env * the number of envs
                 for step in range(0, train_args.num_steps): # num_steps: number of steps PER ROLLOUT
                     global_step += 1 * train_args.num_envs
                     train_steps += 1 * train_args.num_envs
@@ -175,45 +176,43 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                         continue
 
 
-                    sum_avg_eps_rewards = 0
+                    sum_eps_LTA_returns = 0
                     sum_eps_returns = 0
+                    sum_eps_length = 0
                     n_eps = 0
                     for info in infos["final_info"]:
                         # Skip the envs that are not done
                         if info is None:
                             continue
                         n_eps += 1
-                        average_eps_reward = info['episode']['r' ] /info['episode']['l']
-                        sum_avg_eps_rewards += average_eps_reward
-                        sum_eps_returns += info["episode"]["r"]
-                        wandb.log({
-                            "train/episodic_return": info["episode"]["r"],
-                            "train/episodic_length": info["episode"]["l"],
-                            "train/episodic_average": average_eps_reward,
-                        })
+                        sum_eps_returns += info["episode"]["r"] # Raw return
+                        sum_eps_LTA_returns += info['episode']['r' ] /info['episode']['l'] # returns averaged by the episode length
+                        sum_eps_length += info["episode"]["l"] #
+                        # wandb.log({
+                        #     "train/episodic_return": info["episode"]["r"],
+                        #     "train/episodic_length": info["episode"]["l"],
+                        #     "train/episodic_average": average_eps_reward,
+                        # })
 
-                    sum_avg_eps_rewards = sum_avg_eps_rewards/n_eps
-                    avg_LTA_reward = sum_avg_eps_rewards /infos['_final_info'].sum()/info["episode"]["l"]
-                    avg_eps_return = sum_avg_eps_rewards /infos['_final_info'].sum()
-                    #pbar.update(update)
+                    avg_eps_return = sum_eps_returns/n_eps
+                    avg_LTA_return = sum_eps_LTA_returns/n_eps
+                    avg_eps_length = sum_eps_length/n_eps
 
 
-                    best_scores, info_string = checkpoint_saver(agent, update ,avg_LTA_reward[0])
+                    wandb.log({
+                        "train/mean_eps_return" : avg_eps_return,
+                        "train/avg_LTA_return" : avg_LTA_return,
+                        "train/avg_eps_length" : avg_eps_length
+                    })
 
-                    if avg_LTA_reward > best_LTA: # check if the average LTA reward is greater than the previous best
+                    best_scores, info_string = checkpoint_saver(agent, update ,avg_LTA_return[0])
+
+                    if avg_LTA_return > best_LTA: # check if the average LTA reward is greater than the previous best
                         new_best = True
                         torch.save(agent.state_dict(), checkpoint_saver.dirpath + f"manual_save.pt")
-                        best_LTA = avg_LTA_reward
+                        best_LTA = avg_LTA_return
+                        wandb.log({"train/best_LTA":best_LTA})
 
-
-                    # pbar.set_postfix({"Global_Step": global_step,
-                    #                   "avg_eps_ret": round(avg_eps_return[0],3),
-                    #                   "avg_LTA_rew": avg_LTA_reward[0],
-                    #                   "best_run_score": round(best_LTA[0],4),
-                    #                   "best_overall_score": best_scores[0]}
-                    #                  )
-
-                    #stop = Stopper.update(avg_LTA_reward)
                 """
                 STEP (2): COMPUTE LOSSES AND GRADIENTS FROM ROLLOUT DATA
                 """
@@ -223,31 +222,33 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                     next_value = agent.get_value(next_obs).reshape(1, -1)
                     advantages = torch.zeros_like(rewards).to(device)
                     lastgaelam = 0
-                    ''' (2a) Bootstrapping
+                    ''' (2a) Advantage Loop with Bootstrapping
                         if a sub-environment is not terminated nor truncated, 
                         PPO estimates the value of the next state in this sub-environment as the value target.
+                        Recall: done is true if the trajectory ended AFTER a step
                     '''
                     for t in reversed(range(train_args.num_steps)):
-                        if t == train_args.num_steps - 1:
-                            nextnonterminal = 1.0 - next_done
-                            nextvalues = next_value
-                        else:
-                            nextnonterminal = 1.0 - dones[t + 1]
-                            nextvalues = values[t + 1]
+                        if t == train_args.num_steps - 1: # i.e. the final step in the rollout
+                            nextnonterminal = 1.0 - next_done   # 0 if the final step was terminal, 1 otherwise
+                            nextvalues = next_value             # nextvalues = critic estimate of the final state
+                        else:   # if the step is not the final one
+                            nextnonterminal = 1.0 - dones[t + 1] # check if the next step was terminal
+                            nextvalues = values[t + 1]           # next_values = critic estimate of the next step
+
                         delta = rewards[t] + train_args.gamma * nextvalues * nextnonterminal - values[t]
                         advantages[t] = lastgaelam = delta + train_args.gamma * train_args.gae_lambda * nextnonterminal * lastgaelam
                     returns = advantages + values
 
-                # flatten the batch
+                ## Prep data into flat batches
                 b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
                 b_logprobs = logprobs.reshape(-1)
                 b_actions = uc_actions.reshape((-1,) + envs.single_action_space.shape)
                 b_advantages = advantages.reshape(-1)
                 b_returns = returns.reshape(-1) #
                 b_values = values.reshape(-1)
+                b_inds = np.arange(train_args.batch_size)
 
                 # Optimizing the policy and value network
-                b_inds = np.arange(train_args.batch_size)
                 clipfracs = []
                 for epoch in range(train_args.update_epochs):
                     update_steps+=1
