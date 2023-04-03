@@ -25,7 +25,7 @@ from trainers import train_agent
 
 
 
-file = "run_settings.txt"
+file = "run_settings/run_settings.txt"
 
 def get_user_input():
     input_str = input("Input any tags for run: ")
@@ -224,7 +224,7 @@ if __name__ == "__main__":
 
 
     # Retrieve training, environment, and test parameters from json files
-    args1 = read_args_file('bc_run_settings.txt')
+    args1 = read_args_file('run_settings/gamma_testing.txt')
 
 
     TRAIN = args1["TRAIN"]

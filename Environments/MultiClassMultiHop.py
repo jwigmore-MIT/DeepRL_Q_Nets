@@ -171,8 +171,8 @@ class MultiClassMultiHop(gym.Env):
         self._serve(flows)
         info['flows'] = self.flatten_action(deepcopy(self.f))
 
-        reward = self._get_reward()
-        self.backlog = -reward
+        backlog = self.backlog = info["backlog"] =  self._get_backlog()
+        reward = - backlog
 
         # get and record arrivals and next capacities
         self._sim_arrivals()
@@ -284,13 +284,13 @@ class MultiClassMultiHop(gym.Env):
 
         return
 
-    def _get_reward(self):
+    def _get_backlog(self):
         cost = np.array([0])
         for i, Q_i in self.Q.items():
             for cls, Q_ic in Q_i.items():
                 cost += Q_ic #- self.Arr[i][cls] # uncomment if we want to not factor in current arrivals
         # self.logger.record_env_item("cost", cost, self.tt)
-        return min(-cost,0)
+        return max(cost,0)
 
     # Getters
     def get_state(self):

@@ -1,0 +1,88 @@
+{
+  "problem_instance": {
+    "name": "CrissCross2",
+    "notes": "Copy of CrissCross2v2 for reward modification testing",
+    "nodes": "[1, 2, 3, 4, 5, 6, 7, 8]",
+    "links": "[[1,2], [1,3], [1,4], [2,5], [2,6], [3,6], [3,7], [4,7], [4,8], [2,3], [3,2], [3,4], [4,3]]",
+    "classes": {
+      "1": {
+        "source": 1,
+        "destination": 5,
+        "arrival": 2,
+        "probability": 0.5
+      },
+      "2": {
+        "source": 1,
+        "destination": 6,
+        "arrival": 1,
+        "probability": 1
+      },
+      "3": {
+        "source": 1,
+        "destination": 7,
+        "arrival": 5,
+        "probability": 0.2
+      },
+      "4": {
+        "source": 1,
+        "destination": 8,
+        "arrival": 5,
+        "probability": 0.5
+      }
+    },
+    "capacities": {
+      "(1,2)": {
+        "capacity": 2,
+        "probability": 1
+      },
+      "(1,3)": {
+        "capacity": 5,
+        "probability": 1
+      },
+      "(1,4)": {
+        "capacity": 2,
+        "probability": 1
+      },
+      "(2,5)": {
+        "capacity": 3,
+        "probability": 1
+      },
+      "(2,6)": {
+        "capacity": 3,
+        "probability": 1
+      },
+      "(3,6)": {
+        "capacity": 2,
+        "probability": 1
+      },
+      "(3,7)": {
+        "capacity": 2,
+        "probability": 1
+      },
+      "(4,7)": {
+        "capacity": 2,
+        "probability": 1
+      },
+      "(4,8)": {
+        "capacity": 3,
+        "probability": 1
+      },
+      "(2,3)": {
+        "capacity": 2,
+        "probability": 1
+      },
+      "(3,2)": {
+        "capacity": 3,
+        "probability": 1
+      },
+      "(3,4)": {
+        "capacity": 5,
+        "probability": 1
+      },
+      "(4,3)": {
+        "capacity": 5,
+        "probability": 1
+      }
+    }
+  }
+}

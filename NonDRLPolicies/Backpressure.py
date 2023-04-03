@@ -82,12 +82,13 @@ class MCMHBackPressurePolicy(nn.Module):
 
         # determine the optimal class for each link
         opt_ij = {}  # (i,j): (number of optimal class for (i,j) :  weight (W_ij))
+        Q_c = deepcopy(Q) #Want to work with a modifiable copy so we account for decisions that will be made prior
         for link, cap in Cap.items():
             #link = self.str_to_tup_str(link)
             #Q_i = Q[str(link[0])]  # dict
             #Q_j = Q[str(link[1])]  # dict
-            Q_i = Q[link[0]]
-            Q_j = Q[link[1]]
+            Q_i = Q_c[link[0]]
+            Q_j = Q_c[link[1]]
             diff = {}
             for cls, amt in Q_i.items():
                 diff[cls] = Q_i[cls] - Q_j[cls]

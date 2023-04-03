@@ -336,3 +336,9 @@ def test_StaticPolicy(run, static_pol, env_para, test_args, device='cpu', store_
     q_dfs, q_df = wandb_test_qs_vs_time(test_history, merge=True)
 
     return {"all_rewards": all_rewards, "test_history": test_history, "q_df": q_df, "q_dfs": q_dfs}
+
+
+
+def run_sanity_check(test_df):
+    # Checks to make sure arrivals = departure
+    pass

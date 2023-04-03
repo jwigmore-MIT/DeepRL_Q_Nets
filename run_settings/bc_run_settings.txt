@@ -1,0 +1,13 @@
+TRAIN: False
+RETRAIN: False
+TEST: False
+BP_TEST: True
+BPM_TEST: False
+STATIC_TEST: False
+train_param_path: "JSON/Training/PPO-CC4v3.json"
+env_param_path: "JSON/Environment/Triangle1.json"
+test_param_path: "JSON/Testing/test-BP-cloning.json"
+wandb_project:"Behavorial_Cloning"
+wandb_entity: "jwigmore-research"
+artifact_name: "jwigmore-research/Scheduling_Routing_DRL/CrissCross4_PPO-CC4.pt"
+artifact_version: "v118"

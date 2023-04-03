@@ -1,0 +1,13 @@
+TRAIN: True
+RETRAIN: False
+TEST: False
+BP_TEST: False
+BPM_TEST: False
+STATIC_TEST: False
+train_param_path: "JSON/Training/PPO-gamma1.json"
+env_param_path: "JSON/Environment/CrissCross2-gamma2.json"
+test_param_path: "JSON/Testing/test-gamma1.json"
+wandb_project:"reward_testing"
+wandb_entity: "jwigmore-research"
+artifact_name: "jwigmore-research/Scheduling_Routing_DRL/CrissCross4_PPO-CC4.pt"
+artifact_version: "v118"
