@@ -21,11 +21,9 @@ def parse_training_json(json_path, config_args):
     for key, value in algo_para.items():
         setattr(args, key, value)
         setattr(config_args, f"train/{key}", value)
-    # args.num_steps = int(args.num_steps_per_env*args.num_envs)
-    # args.reset_steps = int(args.reset_steps_per_env*args.num_envs)
-    args.batch_size = int(args.num_envs * args.num_steps)
-    args.minibatch_size = int(args.batch_size // args.num_minibatches)
-    args.num_resets = args.total_timesteps /args.reset_steps # total number of new trajectories seen
+    args.batch_size = int(args.num_envs * args.num_steps_per_rollout)
+    args.minibatch_size = int(args.batch_size // args.num_minibatches_per_update)
+    args.num_resets_per_env = args.total_timesteps // args.num_envs // args.num_steps_per_reset # total number of new trajectories seen per, not used - only for trackin
     return args
 
 def parse_env_json(json_path, config_args):
