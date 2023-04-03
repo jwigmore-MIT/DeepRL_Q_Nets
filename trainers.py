@@ -88,7 +88,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
 
     # Initialize the environments
     envs = gym.vector.SyncVectorEnv(
-        [make_MCMH_env(env_para, max_steps = train_args.reset_steps, time_scaled = train_args.time_scaled) for i in range(train_args.num_envs)]
+        [make_MCMH_env(env_para, max_steps = train_args.num_steps_per_reset, time_scaled = train_args.time_scaled) for i in range(train_args.num_envs)]
     )
 
     # Initialize agents and pass agents (nn.module) to device
@@ -105,21 +105,30 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
     optimizer = optim.Adam(agent.parameters(), lr=train_args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
-    obs = torch.zeros((train_args.num_steps, train_args.num_envs) + envs.single_observation_space.shape).to(device)
-    uc_actions = torch.zeros((train_args.num_steps, train_args.num_envs) + envs.single_action_space.shape).to(device) #UNCLIPPED actions
-    logprobs = torch.zeros((train_args.num_steps, train_args.num_envs)).to(device)
-    rewards = torch.zeros((train_args.num_steps, train_args.num_envs)).to(device)
-    dones = torch.zeros((train_args.num_steps, train_args.num_envs)).to(device)
-    values = torch.zeros((train_args.num_steps, train_args.num_envs)).to(device)
+    obs = torch.zeros((train_args.num_steps_per_rollout, train_args.num_envs) + envs.single_observation_space.shape).to(device)
+    uc_actions = torch.zeros((train_args.num_steps_per_rollout, train_args.num_envs) + envs.single_action_space.shape).to(device) #UNCLIPPED actions
+    logprobs = torch.zeros((train_args.num_steps_per_rollout, train_args.num_envs)).to(device)
+    rewards = torch.zeros((train_args.num_steps_per_rollout, train_args.num_envs)).to(device)
+    dones = torch.zeros((train_args.num_steps_per_rollout, train_args.num_envs)).to(device)
+    values = torch.zeros((train_args.num_steps_per_rollout, train_args.num_envs)).to(device)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     train_steps = 0
-    update_steps = 0
-    wandb.define_metric("train/step")
-    wandb.define_metric("train/update")
-    wandb.define_metric("train/*", step_metric="train/step")
-    wandb.define_metric("losses/*", step_metric="train/update")
+    update_counter = 0
+    mini_batch_counter = 0
+    reset_counter = 0
+    rollout_counter = 0
+    wandb.define_metric("counters/global_steps")
+    wandb.define_metric("counters/train_steps")
+    wandb.define_metric("counters/rollouts")
+    wandb.define_metric("counters/training_episodes")
+    wandb.define_metric("counters/mb_updates")
+    wandb.define_metric("counters/updates")
+    wandb.define_metric("train/*", step_metric="counters/training_episodes")
+    wandb.define_metric("losses/*", step_metric="counters/rollouts")
+    wandb.define_metric("misc/*", step_metric = "counters/rollouts")
+
 
     start_time = time.time()
     next_obs, _ = envs.reset(seed=train_args.seed)  ## TODO: see what reset() normally returns
@@ -129,6 +138,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
     best_LTA = -np.inf
     Stopper = StopTrainingOnNoImprovement(num_updates,train_args.no_improv_thresh)
     manual_stop = False
+
     while not manual_stop:
         try:
             pbar = tqdm(range(num_updates+1))
@@ -151,10 +161,12 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                 '''
                 # Note: each `step` corresponds to a step in all parallel environments run simultaneously
                 # Parameter in train_args json is "num_steps_per_env" and the num_steps used below is num_steps_per_env * the number of envs
-                for step in range(0, train_args.num_steps): # num_steps: number of steps PER ROLLOUT
+
+                for step in range(0, train_args.num_steps_per_rollout): # num_steps: number of steps PER ROLLOUT
                     global_step += 1 * train_args.num_envs
-                    train_steps += 1 * train_args.num_envs
-                    wandb.log({"train/step":train_steps})
+                    train_steps += 1
+                    wandb.log({"counters/train_steps":train_steps})
+                    wandb.log({"counters/global_steps":global_step})
                     obs[step] = next_obs
                     dones[step] = next_done
 
@@ -171,50 +183,62 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                     rewards[step] = torch.tensor(reward).to(device).view(-1)
                     next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
 
-                    # Only print when at least 1 env is done
-                    if "final_info" not in infos:
+
+                    if "final_info" in infos:
+                        reset_counter += 1
+                        wandb.log({"counters/training_episodes": reset_counter})
+                        sum_eps_LTA_returns = 0
+                        sum_eps_returns = 0
+                        sum_eps_length = 0
+                        sum_backlog = 0
+                        n_eps = 0
+                        for info in infos["final_info"]:
+                            # Skip the envs that are not done
+                            if info is None:
+                                continue
+                            n_eps += 1
+                            sum_backlog += info["backlog"]
+                            sum_eps_returns += info["episode"]["r"]  # Raw return
+                            sum_eps_LTA_returns += info['episode']['r'] / info['episode'][
+                                'l']  # returns averaged by the episode length
+                            sum_eps_length += info["episode"]["l"]  #
+                            # wandb.log({
+                            #     "train/episodic_return": info["episode"]["r"],
+                            #     "train/episodic_length": info["episode"]["l"],
+                            #     "train/episodic_average": average_eps_reward,
+                            # })
+                        avg_backlog = sum_backlog / n_eps
+                        avg_eps_return = sum_eps_returns / n_eps
+                        avg_LTA_return = sum_eps_LTA_returns / n_eps
+                        avg_eps_length = sum_eps_length / n_eps
+
+                        wandb.log({
+                            "train/mean_eps_return": avg_eps_return,
+                            "train/avg_LTA_return": avg_LTA_return,
+                            "train/avg_eps_backlog": avg_backlog,
+                            "train/avg_eps_length": avg_eps_length
+                        })
+
+                        best_scores, info_string = checkpoint_saver(agent, reset_counter, avg_LTA_return[0])
+
+                        if avg_LTA_return > best_LTA:  # check if the average LTA reward is greater than the previous best
+                            new_best = True
+                            torch.save(agent.state_dict(), checkpoint_saver.dirpath + f"manual_save.pt")
+                            best_LTA = avg_LTA_return
+                            wandb.log({"train/best_LTA": best_LTA})
+                    # (Above) if "final_info" in infos -> i.e. the episode has ended, env reset, and done = True
+                    else:
                         continue
 
 
-                    sum_eps_LTA_returns = 0
-                    sum_eps_returns = 0
-                    sum_eps_length = 0
-                    n_eps = 0
-                    for info in infos["final_info"]:
-                        # Skip the envs that are not done
-                        if info is None:
-                            continue
-                        n_eps += 1
-                        sum_eps_returns += info["episode"]["r"] # Raw return
-                        sum_eps_LTA_returns += info['episode']['r' ] /info['episode']['l'] # returns averaged by the episode length
-                        sum_eps_length += info["episode"]["l"] #
-                        # wandb.log({
-                        #     "train/episodic_return": info["episode"]["r"],
-                        #     "train/episodic_length": info["episode"]["l"],
-                        #     "train/episodic_average": average_eps_reward,
-                        # })
 
-                    avg_eps_return = sum_eps_returns/n_eps
-                    avg_LTA_return = sum_eps_LTA_returns/n_eps
-                    avg_eps_length = sum_eps_length/n_eps
+                # A ROLLOUT HAS BEEN COLLECTED
+                rollout_counter += 1
+                wandb.log({"counters/rollouts": rollout_counter})
 
-
-                    wandb.log({
-                        "train/mean_eps_return" : avg_eps_return,
-                        "train/avg_LTA_return" : avg_LTA_return,
-                        "train/avg_eps_length" : avg_eps_length
-                    })
-
-                    best_scores, info_string = checkpoint_saver(agent, update ,avg_LTA_return[0])
-
-                    if avg_LTA_return > best_LTA: # check if the average LTA reward is greater than the previous best
-                        new_best = True
-                        torch.save(agent.state_dict(), checkpoint_saver.dirpath + f"manual_save.pt")
-                        best_LTA = avg_LTA_return
-                        wandb.log({"train/best_LTA":best_LTA})
 
                 """
-                STEP (2): COMPUTE LOSSES AND GRADIENTS FROM ROLLOUT DATA
+                STEP (2): LEARNING PHASE COMPUTE LOSSES AND GRADIENTS FROM ROLLOUT DATA
                 """
 
                 with torch.no_grad():
@@ -227,8 +251,8 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                         PPO estimates the value of the next state in this sub-environment as the value target.
                         Recall: done is true if the trajectory ended AFTER a step
                     '''
-                    for t in reversed(range(train_args.num_steps)):
-                        if t == train_args.num_steps - 1: # i.e. the final step in the rollout
+                    for t in reversed(range(train_args.num_steps_per_rollout)):
+                        if t == train_args.num_steps_per_rollout - 1: # i.e. the final step in the rollout
                             nextnonterminal = 1.0 - next_done   # 0 if the final step was terminal, 1 otherwise
                             nextvalues = next_value             # nextvalues = critic estimate of the final state
                         else:   # if the step is not the final one
@@ -250,14 +274,18 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
 
                 # Optimizing the policy and value network
                 clipfracs = []
-                for epoch in range(train_args.update_epochs):
-                    update_steps+=1
-                    wandb.log({"train/update":update_steps})
+
+
+                for epoch in range(train_args.updates_per_rollout):
+                    update_counter +=1
+                    wandb.log({"counters/updates": update_counter})
                     # Shuffle the batch indices
                     np.random.shuffle(b_inds)
 
                     # Loop through 'start' indices -> (0, minibatch_size, 2*minibatch_size, ...)
                     for start in range(0, train_args.batch_size, train_args.minibatch_size):
+                        mini_batch_counter += 1
+                        wandb.log({"counters/mb_updates": mini_batch_counter})
                         # Get end index
                         end = start + train_args.minibatch_size
 
