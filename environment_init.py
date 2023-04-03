@@ -22,7 +22,7 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
 
     return thunk
 
-def make_MCMH_env(env_para, max_steps = None, time_scaled = False):
+def make_MCMH_env(env_para, max_steps = None, time_scaled = False, test = False):
     class FlatActionWrapper(gym.ActionWrapper):
         """
         This action wrapper maps flattened actions <nd.array> back to dictionary
