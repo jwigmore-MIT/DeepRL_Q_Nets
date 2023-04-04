@@ -153,9 +153,12 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
             pbar = tqdm(range(num_updates+1))
             for update in pbar:
                 # Annealing the rate if instructed to do so.
-                if train_args.anneal_lr:
+                if train_args.learning_rate_decay == "linear":
                     frac = 1.0 - (update - 1.0) / num_updates
                     lrnow = frac * train_args.learning_rate
+                    optimizer.param_groups[0]["lr"] = lrnow
+                elif train_args.learning_rate_decay == "exponential":
+                    lrnow = train_args.learning_rate * np.exp(-train_args.lr_decay_rate * update)
                     optimizer.param_groups[0]["lr"] = lrnow
                 ## (1) COLLECT ROLLOUT
                 '''
