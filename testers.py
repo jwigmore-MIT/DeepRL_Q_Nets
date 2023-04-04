@@ -157,7 +157,7 @@ def agent_test(run, agent, env_para, test_args, store_history = True):
                 test_history[n_env] = pd.concat(
                     [pd_rewards, pd_obs, pd_p_actions, pd_actions, pd_flows, pd_flow_diff, pd_arrivals], axis=1)
 
-    fig = plot_performance_vs_time(np.array(all_rewards).T, "AGENT") # need to get policy name
+    #fig = plot_performance_vs_time(np.array(all_rewards).T, "AGENT") # need to get policy name
     #wandb.log({"figure": wandb.Image(fig)})
     wandb_plot_rewards_vs_time(all_rewards, "AGENT")
     q_dfs, q_df = wandb_test_qs_vs_time(test_history, merge=True)

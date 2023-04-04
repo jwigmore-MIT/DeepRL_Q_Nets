@@ -312,8 +312,8 @@ if __name__ == "__main__":
         static_test_outputs = run_static_test()
     if SWEEP:
         sweep_configuration = {
-            "method": "random",
-            "name": "sweep_test2",
+            "method": "bayes",
+            "name": "sweep_test4",
             "metric": {"name": "train/avg_eps_backlog", "goal": "minimize"},
             "parameters": {
                 "train/actor_learning_rate": {"max": 1e-1, "min": 1e-5},
@@ -332,9 +332,13 @@ if __name__ == "__main__":
                 "train/time_scaled": {"values": [True, False]},
                 "train/minibatches_per_update": {"values": [1, 2, 4, 8]},
                 "train/updates_per_rollout": {"values": [1, 2, 4, 8]},
+                "train/max_grad_norm" : {"values": [0, 0.25, 0.5, 1]},
+                "train/clip_coef": {"min": 0.1, "max": 5.0},
+                "train/norm_adv": {"values" : [True, False]},
+                "train/clip_vloss" : {"values": [True, False]}
             }
         }
-        sweep_id = wandb.sweep(sweep = sweep_configuration, project = "my-third-sweep")
+        sweep_id = wandb.sweep(sweep = sweep_configuration, project = "my-fourth-sweep")
         wandb.agent(sweep_id, function = run_sweep, count = 500)
 
     # if False:
