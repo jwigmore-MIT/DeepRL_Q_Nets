@@ -95,6 +95,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                        no_state_penalty= train_args.no_state_penalty,
                        min_reward = train_args.min_reward,
                        delivered_rewards = train_args.delivered_rewards,
+                       horizon_scaled = train_args.horizon_scaled,
                        ) for i in range(train_args.num_envs)]
     )
 
@@ -109,7 +110,12 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
     wandb.watch(agent, log_freq = 100)
 
     ## Initialize ADAM optimizer
-    optimizer = optim.Adam(agent.parameters(), lr=train_args.learning_rate, eps=1e-5)
+    # optimizer = optim.Adam(agent.parameters(), lr=train_args.learning_rate, eps=1e-5)
+    optimizer = optim.Adam([
+        {'params': agent.actor_logstd, 'lr': train_args.actor_learning_rate},
+        {'params': agent.actor_mean.parameters(), 'lr': train_args.actor_learning_rate},
+        {'params': agent.critic.parameters(), 'lr': train_args.critic_learning_rate},
+    ], eps = 1e-5)
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((train_args.num_steps_per_rollout, train_args.num_envs) + envs.single_observation_space.shape).to(device)
@@ -152,14 +158,24 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
         try:
             pbar = tqdm(range(num_updates+1))
             for update in pbar:
-                # Annealing the rate if instructed to do so.
-                if train_args.learning_rate_decay == "linear":
+                ## LEARNING RATE SCHEDULING
+                if train_args.actor_lr_decay == "linear":
                     frac = 1.0 - (update - 1.0) / num_updates
-                    lrnow = frac * train_args.learning_rate
+                    lrnow = frac * train_args.actor_lr_decay_rate * train_args.actor_learning_rate
+                    optimizer.param_groups[0]["lr"] = lrnow # updating actor_logstd learning_rate
+                    optimizer.param_groups[1]["lr"] = lrnow # updating actor_mean learning_rate
+                elif train_args.actor_lr_decay == "exponential":
+                    lrnow = train_args.actor_learning_rate * np.exp(-train_args.actor_lr_decay_rate * update)
                     optimizer.param_groups[0]["lr"] = lrnow
-                elif train_args.learning_rate_decay == "exponential":
-                    lrnow = train_args.learning_rate * np.exp(-train_args.lr_decay_rate * update)
-                    optimizer.param_groups[0]["lr"] = lrnow
+                    optimizer.param_groups[1]["lr"] = lrnow
+                if train_args.critic_lr_decay == "linear":
+                    frac = 1.0 - (update - 1.0) / num_updates
+                    lrnow = frac * train_args.critic_lr_decay_rate * train_args.critic_learning_rate
+                    optimizer.param_groups[2]["lr"] = lrnow  # updating critic learning_rate
+                elif train_args.critic_lr_decay == "exponential":
+                    lrnow = train_args.critic_learning_rate * np.exp(-train_args.critic_lr_decay_rate * update)
+                    optimizer.param_groups[2]["lr"] = lrnow
+
                 ## (1) COLLECT ROLLOUT
                 '''
                 STEP (1): COLLECT ROLLLOUT
@@ -379,7 +395,8 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
 
                 # TRY NOT TO MODIFY: record rewards for plotting purposes
                 wandb.log({
-                    "train/learning_rate": optimizer.param_groups[0]["lr"],
+                    "train/actor_learning_rate": optimizer.param_groups[0]["lr"],
+                    "train/critic_learing_rate": optimizer.param_groups[2]["lr"],
                     "train/SPS": int(train_steps / (time.time() - start_time)),
                     "losses/value_loss": v_loss.item(),
                     "losses/policy_loss": pg_loss.item(),

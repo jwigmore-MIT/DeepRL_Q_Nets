@@ -25,7 +25,7 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
 def make_MCMH_env(env_para, max_steps = None, time_scaled = False,
                   moving_average = False, test = False,
                   no_state_penalty = False, min_reward = False,
-                  delivered_rewards = False):
+                  delivered_rewards = False, horizon_scaled = False):
     class FlatActionWrapper(gym.ActionWrapper):
         """
         This action wrapper maps flattened actions <nd.array> back to dictionary
@@ -83,6 +83,15 @@ def make_MCMH_env(env_para, max_steps = None, time_scaled = False,
         def reward(self, rewards):
             return self.unwrapped.delivered
 
+    class HorizonScaledRewardWrapper(gym.RewardWrapper):
+
+        def __init__(self, env, max_steps):
+            super().__init__(env)
+            self.max_steps = max_steps
+
+        def reward(self, reward):
+            return reward/self.max_steps
+
 
 
     def thunk():
@@ -106,6 +115,8 @@ def make_MCMH_env(env_para, max_steps = None, time_scaled = False,
             env = ClipRewardWrapper(env, min_reward)
         if delivered_rewards:
             env = DeliveredRewardsWrapper(env)
+        if horizon_scaled:
+            env = HorizonScaledRewardWrapper(env, max_steps)
         #env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         return env
 

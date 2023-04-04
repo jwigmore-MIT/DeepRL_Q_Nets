@@ -1,12 +1,10 @@
-## Misc TODO
-1. Use tqdm for training loop
-2. Manual_Test_overide
+# TO RUN
+1. With advantage normalization
 
-## Seeding
-1. Need to figure out how to seed gym environments properly in addition to all DRL code
+## Why would the policy loss be much smaller for the shared optimizer?
+Learning occurs rapidly when policy loss gets small
 
-# Value Estimation
-
+# Notes
 ## Advantage Formula
 delta = rewards[t] + gamma*V(t+1)*I(t+1 is not terminal) - V(t)
 advantages[t] = delta + (gamma * lambda * advantages[t+1]) * I(t+1 is not terminal)
@@ -16,14 +14,8 @@ advantages[t] = delta + (gamma * lambda * advantages[t+1]) * I(t+1 is not termin
 (WRONG) We are technically truncating the environment because we are wrapping it in a time-limit wrapper. So we should NEVER bootstrap. 
 (CORRECT) IF num_steps_per_env != reset_steps_per_env then we do bootstrap after every rollout
 If done incorrectly, this can be bad.  If gamma = 1, and we bootstrap the final value, this bootstrapped estimate will be infinite.
-### What if num_steps_per_env != env_reset_steps i.e. 'done' is not returned after a rollout
 
 
-
-## Value Function Loss
-Unclipped VF loss is
-
-$$(v_\theta - v_{target})^2$$
 
 ## Training Step Terminology
 train_steps = 1 step taken in all environments i.e. num_steps in a rollout 
