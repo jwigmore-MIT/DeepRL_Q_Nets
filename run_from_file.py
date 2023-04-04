@@ -14,6 +14,7 @@ import logging
 from collections import defaultdict
 logging.getLogger().setLevel(logging.INFO)
 import warnings
+from copy import deepcopy
 
 warnings.filterwarnings('ignore')
 
@@ -209,6 +210,37 @@ def run_static_test():
     run.finish()
     return test_outputs
 
+def run_sweep():
+    """ Notes
+    1. Sweep configuration which is passed to wandb needs to be a dictionary
+    2. The parameters being swept would then need to be modified in the training_args
+    """
+    def create_new_train_args():
+        new_config = {}
+        new_train_args = deepcopy(train_args)
+        for key, value in run.config.items():
+            new_config[key] = value
+            train_param_key = key.split("/")[1]
+            setattr(new_train_args, train_param_key, value)
+        new_train_args.batch_size = int(new_train_args.num_envs * new_train_args.num_steps_per_rollout)
+        new_train_args.minibatch_size = int(new_train_args.batch_size // new_train_args.num_minibatches_per_update)
+        new_train_args.num_resets_per_env = new_train_args.total_timesteps // new_train_args.num_envs // new_train_args.num_steps_per_reset
+        return new_train_args
+
+
+
+
+    run = wandb.init()
+    #print(run.config)
+    sweep_train_args = create_new_train_args()
+    run.config.setdefaults(config_args)
+    save_model_path = f"Saved_Models/Sweeps{sweep_id}/"
+    checkpoint_saver = CheckpointSaver(save_model_path, env_string=env_name, algo_string=train_name, decreasing=False,
+                                       top_n=5)
+
+    train_agent(env_para, sweep_train_args, test_args, run, checkpoint_saver)
+
+
 #model_load_path = "/home/jwigmore/PycharmProjects/DRL_Stoch_Qs/clean_rl/Best_models/16.03_07_55_CrissCrossTwoClass__PPO_para_1__5031998"
 # https://www.reddit.com/r/reinforcementlearning/comments/11txwjw/agent_not_learning_3_problems_and_solutions/
 
@@ -224,7 +256,7 @@ if __name__ == "__main__":
 
 
     # Retrieve training, environment, and test parameters from json files
-    args1 = read_args_file('run_settings/gamma_testing.txt')
+    args1 = read_args_file('run_settings/sweep_testing.txt')
 
 
     TRAIN = args1["TRAIN"]
@@ -233,6 +265,7 @@ if __name__ == "__main__":
     BP_TEST = args1["BP_TEST"]
     BPM_TEST = args1["BPM_TEST"]
     STATIC_TEST = args1["STATIC_TEST"]
+    SWEEP = args1["SWEEP"]
 
     train_param_path = args1["train_param_path"]
     train_name = train_param_path.split("/")[-1].replace(".json","")
@@ -277,6 +310,32 @@ if __name__ == "__main__":
         BPM_test_outputs = run_BP_test(M = True)
     if STATIC_TEST:
         static_test_outputs = run_static_test()
+    if SWEEP:
+        sweep_configuration = {
+            "method": "random",
+            "name": "sweep_test2",
+            "metric": {"name": "train/avg_eps_backlog", "goal": "minimize"},
+            "parameters": {
+                "train/actor_learning_rate": {"max": 1e-1, "min": 1e-5},
+                "train/critic_learning_rate": {"max": 1e-1, "min": 1e-5},
+                "train/critic_lr_decay_rate": {"max": 1.0, "min": 1e-2},
+                "train/actor_lr_decay_rate": {"max": 1.0, "min": 1e-2},
+                "train/critic_lr_decay" : {"values": ["linear", "exponential"]},
+                "train/actor_lr_decay" : {"values": ["linear", "exponential"]},
+                "train/num_steps_per_rollout": {"values": [16, 32, 64, 128, 256]},
+                "train/gamma" : {"max": 1.0, "min": 0.5},
+                "train/gae_lambda":{"max": 0.9999, "min": 0.25},
+                "train/time_scaled" : {"values" : [0, 1]},
+                "train/ent_coef" :{"values": [0, 0.05, 0.1, 0.2]},
+                "train/vf_coef" : {"values" : [0.1, 0.25, 0.5, 0.75, 1]},
+                "train/num_envs" : {"values": [1, 2, 5, 10, 15]},
+                "train/time_scaled": {"values": [True, False]},
+                "train/minibatches_per_update": {"values": [1, 2, 4, 8]},
+                "train/updates_per_rollout": {"values": [1, 2, 4, 8]},
+            }
+        }
+        sweep_id = wandb.sweep(sweep = sweep_configuration, project = "my-third-sweep")
+        wandb.agent(sweep_id, function = run_sweep, count = 500)
 
     # if False:
     #     dt_string = datetime.now().strftime("%m-%d_%H%M")
