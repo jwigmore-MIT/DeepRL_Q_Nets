@@ -22,7 +22,10 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
 
     return thunk
 
-def make_MCMH_env(env_para, max_steps = None, time_scaled = False, test = False):
+def make_MCMH_env(env_para, max_steps = None, time_scaled = False,
+                  moving_average = False, test = False,
+                  no_state_penalty = False, min_reward = False,
+                  delivered_rewards = False):
     class FlatActionWrapper(gym.ActionWrapper):
         """
         This action wrapper maps flattened actions <nd.array> back to dictionary
@@ -49,6 +52,38 @@ def make_MCMH_env(env_para, max_steps = None, time_scaled = False, test = False)
             self.t +=1
             return reward/self.t
 
+    class NoStatePenaltyWrapper(gym.RewardWrapper):
+
+        def __init__(self, env):
+            super().__init__(env)
+            self.last_reward = 0
+
+        def reward(self, reward):
+            if self.last_reward < reward:
+                mod_reward = reward - self.last_reward
+            else:
+                mod_reward = reward
+            self.last_reward = reward
+            return mod_reward
+
+    class ClipRewardWrapper(gym.RewardWrapper):
+
+        def __init__(self, env, min_reward):
+            super().__init__(env)
+            self.min_reward = min_reward
+
+        def reward(self,reward):
+            return max(self.min_reward, reward)
+
+    class DeliveredRewardsWrapper(gym.RewardWrapper):
+
+        def __init__(self, env):
+            super().__init__(env)
+
+        def reward(self, rewards):
+            return self.unwrapped.delivered
+
+
 
     def thunk():
         env = MultiClassMultiHop(env_para)
@@ -63,7 +98,14 @@ def make_MCMH_env(env_para, max_steps = None, time_scaled = False, test = False)
         #env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
         if time_scaled:
             env = LongTermAverageRewardWrapper(env, max_steps)
-            #env = gym.wrappers.NormalizeReward(env, gamma=0.99)
+        if moving_average:
+            env = gym.wrappers.NormalizeReward(env, gamma=0.99)
+        if no_state_penalty:
+            env = NoStatePenaltyWrapper(env)
+        if min_reward:
+            env = ClipRewardWrapper(env, min_reward)
+        if delivered_rewards:
+            env = DeliveredRewardsWrapper(env)
         #env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
         return env
 

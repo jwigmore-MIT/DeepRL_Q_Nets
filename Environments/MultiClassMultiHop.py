@@ -79,6 +79,7 @@ class MultiClassMultiHop(gym.Env):
 
         # sum of queues in the network
         self.backlog = 0
+        self.delivered = 0
 
         # gym variables
         self.N = len(self.nodes)
@@ -170,7 +171,7 @@ class MultiClassMultiHop(gym.Env):
         # apply flow (action + exits), update state
         self._serve(flows)
         info['flows'] = self.flatten_action(deepcopy(self.f))
-
+        info["delivered"] = deepcopy(self.delivered)
         backlog = self.backlog = info["backlog"] =  self._get_backlog()
         reward = - backlog
 
@@ -256,7 +257,7 @@ class MultiClassMultiHop(gym.Env):
 
         Q_old = deepcopy(self.Q)
 
-
+        self.delivered = 0
         for link, link_flow in flows.items():
             start_node = link[0]
             end_node = link[1]
@@ -273,6 +274,7 @@ class MultiClassMultiHop(gym.Env):
 
                 # Add f_ijk to end node class k queue, if its not the destination
                 if end_node ==  self.classes[cls][1]:
+                    self.delivered += deepcopy(self.Q[end_node][cls])
                     self.Q[end_node][cls] = 0
                 else:
                     self.Q[end_node][cls] = self.Q[end_node][cls]+self.f[link][cls]

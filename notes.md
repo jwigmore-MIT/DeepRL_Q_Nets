@@ -151,6 +151,16 @@ Computing both the log_probability and entropy is a sum over the action_space di
 value network so that the “global l2 norm” (i.e., the norm of the concatenated gradients of 
 all parameters) does not exceed 0.5."
 
+## Testing
+stabilized| gamma | time_scaled | moving_average | max_grad_norm | norm_adv |   notes
+---------------------------------------------------------------------------------------
+true      |  0.9  | true        | false          | 0.5           | true     | Modest value lost (starts at 275 ends at < 2)
+false     |  0.9  | false       | true           | 0.5           | true     | Essentially zero value lost throughout
+false     |  0.9  | false       | false          | 0.5           | true     | Very large value lost (6e6)
+false     |  0.9  | false       | false          | none          | true     | Very large value lost (6e6)
+false     |  0.9  | false       | false          | 0.5           | false    | Very large value loss (6e6)
+
+
 
 
 ## Debug Test
@@ -164,10 +174,6 @@ minibatch_size = 80
                = batch_size / train_args.num_minibatches
 
 
-### Proof that num_steps is actually per env
-After one Rollout
-    train_steps = **3200**
-    
-    train_args.num_steps = 320 
-                         = 32 [steps/env] * 10[envs]
-    train_args.num_steps_per_env = 32 [steps/env]
+
+
+

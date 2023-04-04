@@ -88,7 +88,14 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
 
     # Initialize the environments
     envs = gym.vector.SyncVectorEnv(
-        [make_MCMH_env(env_para, max_steps = train_args.num_steps_per_reset, time_scaled = train_args.time_scaled) for i in range(train_args.num_envs)]
+        [make_MCMH_env(env_para,
+                       max_steps = train_args.num_steps_per_reset,
+                       time_scaled = train_args.time_scaled,
+                       moving_average= train_args.moving_average,
+                       no_state_penalty= train_args.no_state_penalty,
+                       min_reward = train_args.min_reward,
+                       delivered_rewards = train_args.delivered_rewards,
+                       ) for i in range(train_args.num_envs)]
     )
 
     # Initialize agents and pass agents (nn.module) to device
@@ -109,6 +116,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
     uc_actions = torch.zeros((train_args.num_steps_per_rollout, train_args.num_envs) + envs.single_action_space.shape).to(device) #UNCLIPPED actions
     logprobs = torch.zeros((train_args.num_steps_per_rollout, train_args.num_envs)).to(device)
     rewards = torch.zeros((train_args.num_steps_per_rollout, train_args.num_envs)).to(device)
+    backlogs = torch.zeros((train_args.num_steps_per_rollout, 1)).to(device)
     dones = torch.zeros((train_args.num_steps_per_rollout, train_args.num_envs)).to(device)
     values = torch.zeros((train_args.num_steps_per_rollout, train_args.num_envs)).to(device)
 
@@ -126,6 +134,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
     wandb.define_metric("counters/mb_updates")
     wandb.define_metric("counters/updates")
     wandb.define_metric("train/*", step_metric="counters/training_episodes")
+    wandb.define_metric("train/mean_backlog", step_metric = "counters/train_steps")
     wandb.define_metric("losses/*", step_metric="counters/rollouts")
     wandb.define_metric("misc/*", step_metric = "counters/rollouts")
 
@@ -162,7 +171,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                 # Note: each `step` corresponds to a step in all parallel environments run simultaneously
                 # Parameter in train_args json is "num_steps_per_env" and the num_steps used below is num_steps_per_env * the number of envs
 
-                for step in range(0, train_args.num_steps_per_rollout): # num_steps: number of steps PER ROLLOUT
+                for step in range(0, train_args.num_steps_per_rollout): # num_steps: max number of steps PER ROLLOUT
                     global_step += 1 * train_args.num_envs
                     train_steps += 1
                     wandb.log({"counters/train_steps":train_steps})
@@ -191,6 +200,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                         sum_eps_returns = 0
                         sum_eps_length = 0
                         sum_backlog = 0
+                        sum_delivered = 0
                         n_eps = 0
                         for info in infos["final_info"]:
                             # Skip the envs that are not done
@@ -198,6 +208,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                                 continue
                             n_eps += 1
                             sum_backlog += info["backlog"]
+                            sum_delivered += info["delivered"]
                             sum_eps_returns += info["episode"]["r"]  # Raw return
                             sum_eps_LTA_returns += info['episode']['r'] / info['episode'][
                                 'l']  # returns averaged by the episode length
@@ -208,6 +219,7 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                             #     "train/episodic_average": average_eps_reward,
                             # })
                         avg_backlog = sum_backlog / n_eps
+                        avg_delivered = sum_delivered / n_eps
                         avg_eps_return = sum_eps_returns / n_eps
                         avg_LTA_return = sum_eps_LTA_returns / n_eps
                         avg_eps_length = sum_eps_length / n_eps
@@ -216,6 +228,8 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                             "train/mean_eps_return": avg_eps_return,
                             "train/avg_LTA_return": avg_LTA_return,
                             "train/avg_eps_backlog": avg_backlog,
+                            "train/mean_backlog" : avg_backlog,
+                            "train/avg_eps_delivered" : avg_delivered,
                             "train/avg_eps_length": avg_eps_length
                         })
 
@@ -228,11 +242,15 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                             wandb.log({"train/best_LTA": best_LTA})
                     # (Above) if "final_info" in infos -> i.e. the episode has ended, env reset, and done = True
                     else:
+                        backlogs[step] = torch.Tensor(infos["backlog"].mean()).to(device)
+                        wandb.log({"train/delivered": infos["delivered"].mean()})
+                        wandb.log({"train/mean_backlog": backlogs[step].to("cpu").numpy()})
                         continue
 
 
 
                 # A ROLLOUT HAS BEEN COLLECTED
+
                 rollout_counter += 1
                 wandb.log({"counters/rollouts": rollout_counter})
 
@@ -339,7 +357,8 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
 
                         optimizer.zero_grad()
                         loss.backward()
-                        nn.utils.clip_grad_norm_(agent.parameters(), train_args.max_grad_norm)
+                        if train_args.max_grad_norm> 0:
+                            nn.utils.clip_grad_norm_(agent.parameters(), train_args.max_grad_norm)
                         optimizer.step()
 
                     if eval(train_args.target_kl) is not None:
@@ -368,6 +387,8 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
                     "losses/approx_kl2": approx_kl.item(),
                     "losses/clipfrac": np.mean(clipfracs),
                     "misc/abs_diff_y": abs_diff_y.mean(),
+                    "misc/y_pred": y_pred.mean(),
+                    "misc/y_measured": y_true.mean(),
                     "misc/explained_variance": explained_var,
                     "misc/var_y_true": var_y
 
