@@ -105,6 +105,8 @@ class MultiClassMultiHop(gym.Env):
         self.action_space = spaces.Dict(
             {link: spaces.Dict({cls: spaces.Box(low=0, high=self.max_actions[link][cls], dtype=int) for cls in self.classes.keys()}) for
              link, class_dict in self.max_actions.items()})
+        # Trick to get the number of states minus
+        self.flat_qspace_size = len(self.get_flat_arrival_keys())
 
     def _make_graph(self):
         graph = {}
@@ -479,16 +481,9 @@ def init_discrete_env(para, train = True):
 
 
 
-
 if __name__ == '__main__':
+    # Get the environment params file
     pass
-    #from Problem_Instances.Problem_Instances import simple_networks
-
-    # network initialization
-    #net_para = simple_networks['TwoPath']
-    #env = BaseMultiClassMultiHop(net_para)
-    #fas = env.flatten_action_space()
-    #action_map, flat_action_map = env.generate_action_map()
 
 
 

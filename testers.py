@@ -165,7 +165,7 @@ def agent_test(run, agent, env_para, test_args, store_history = True):
     return {"all_rewards": all_rewards, "test_history": test_history, "q_df": q_df, "q_dfs": q_dfs}
 
 
-def test_BP(run, env_para, test_args, M = False, device='cpu', store_history=True):
+def test_BP(run, env_para, test_args, M = False, device='cpu', store_history=True, awac = False):
     from utils import plot_performance_vs_time
     from environment_init import make_MCMH_env
 
@@ -197,14 +197,18 @@ def test_BP(run, env_para, test_args, M = False, device='cpu', store_history=Tru
             test_seed = np.random.random_integers(1e6)
             next_obs, _ = env.reset(seed=test_seed)
             if store_history:
+
                 state_keys = env.get_flat_obs_keys()
                 action_keys = env.get_flat_action_keys(mod='A')
                 flow_keys = env.get_flat_action_keys(mod="F")
                 arrival_keys = env.get_flat_arrival_keys(mod="V")
+
                 obs = np.zeros([test_length, env.observation_space.shape[0]])
+                next_obs2 = np.zeros([test_length, env.observation_space.shape[0]])
                 actions = np.zeros([test_length, env.action_space.shape[0]])
                 flows = np.zeros([test_length, env.action_space.shape[0]])
                 arrivals = np.zeros([test_length, len(arrival_keys)])
+
                 test_history["Env_seeds"].append(test_seed)
 
             for t in range(test_length):
@@ -220,6 +224,7 @@ def test_BP(run, env_para, test_args, M = False, device='cpu', store_history=Tru
                     else:
                         flows[t] = info['flows'][-1]
                         arrivals[t] = info['arrivals'][-1]
+                    next_obs2[t] = next_obs
                     actions[t] = action
                     all_rewards[t, n_env] = reward[-1]
                 if store_history:

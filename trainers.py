@@ -22,7 +22,7 @@ tqdm_config = {
 
 # Import custom methods
 from environment_init import make_MCMH_env
-from agent_init import Agent
+from agent_init import Agent, Actor, Critic, AdvantageWeightedActorCritic
 from testers import agent_test
 
 class StopTrainingOnNoImprovement:
@@ -452,6 +452,39 @@ def train_ppo_agent(env_para, train_args, test_args, run, checkpoint_saver, arti
     return {"Stopper": Stopper,
             "Agent": agent,
             "test_outputs": test_outputs}
+
+
+def pretrain_AWAC_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact = None, sweep = False):
+    writer = SummaryWriter(run.dir)
+    writer.add_text(
+        "hyperparameters",
+        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(train_args).items()])),
+    )
+
+    ## Set the seed of random, np.random, and torch
+    # TRY NOT TO MODIFY: seeding
+    random.seed(train_args.seed)
+    np.random.seed(train_args.seed)
+    torch.manual_seed(train_args.seed)
+    torch.backends.cudnn.deterministic = train_args.torch_deterministic
+
+    ## Select the device
+    device = torch.device("cuda" if torch.cuda.is_available() and train_args.cuda else "cpu")
+
+    # Initialize the environments
+    envs = gym.vector.SyncVectorEnv(
+        [make_MCMH_env(env_para,
+                       max_steps=train_args.num_steps_per_reset,
+                       time_scaled=train_args.time_scaled,
+                       moving_average=train_args.moving_average,
+                       no_state_penalty=train_args.no_state_penalty,
+                       min_reward=train_args.min_reward,
+                       delivered_rewards=train_args.delivered_rewards,
+                       horizon_scaled=train_args.horizon_scaled,
+                       ) for i in range(train_args.num_envs)]
+    )
+
+    agent = Agent(envs).to(device)
 
 
 
