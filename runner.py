@@ -19,7 +19,7 @@ warnings.filterwarnings('ignore')
 from param_extractors import parse_training_json, parse_test_json, parse_env_json
 from testers import test_from_artifact, test_BP
 from wandb_utils import CheckpointSaver
-from trainers import train_agent
+from trainers import train_ppo_agent
 
 
 
@@ -110,7 +110,7 @@ if __name__ == "__main__":
         save_model_path = f"Saved_Models/{env_name}/{train_name}/"
         checkpoint_saver = CheckpointSaver(save_model_path, env_string= env_name, algo_string=train_name, decreasing=False, top_n=5)
 
-        outputs = train_agent(env_para, train_args, test_args, run, checkpoint_saver)
+        outputs = train_ppo_agent(env_para, train_args, test_args, run, checkpoint_saver)
         try:
             add_final_notes(run)
         except Exception:

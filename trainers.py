@@ -65,8 +65,10 @@ def load_agent(agent, artifact):
             model_dict = torch.load(os.path.join(model_weight_dir, x))
     agent.load_state_dict(state_dict=model_dict)
 
-def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact = None, sweep = False):
-
+def train_ppo_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact = None, sweep = False):
+    '''
+    Train an actor-critic agent using PPO
+    '''
 
 
     ## Setup tensorboard
@@ -450,3 +452,9 @@ def train_agent(env_para, train_args, test_args, run, checkpoint_saver, artifact
     return {"Stopper": Stopper,
             "Agent": agent,
             "test_outputs": test_outputs}
+
+
+
+def train_DAPG_agent(run, checkpoint_saver, artifact = None, sweep = False):
+    pass
+    ## initialize environment, training parameters, and test parameters from run

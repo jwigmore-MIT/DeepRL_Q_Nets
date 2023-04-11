@@ -20,7 +20,7 @@ warnings.filterwarnings('ignore')
 from param_extractors import parse_jsons
 from testers import test_from_artifact, test_BP
 from wandb_utils import CheckpointSaver
-from trainers import train_agent
+from trainers import train_ppo_agent
 from run_from_file import read_args_file, run_BP_test
 
 

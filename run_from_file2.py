@@ -256,7 +256,7 @@ if __name__ == "__main__":
 
 
     # Retrieve training, environment, and test parameters from json files
-    args1 = read_args_file('run_settings/sweep_testing.txt')
+    args1 = read_args_file('run_settings/DAPG_testing.txt')
 
 
     TRAIN = args1["TRAIN"]
@@ -340,130 +340,6 @@ if __name__ == "__main__":
         }
         sweep_id = wandb.sweep(sweep = sweep_configuration, project = "my-fourth-sweep")
         wandb.agent(sweep_id, function = run_sweep, count = 500)
-
-    # if False:
-    #     dt_string = datetime.now().strftime("%m-%d_%H%M")
-    #     run_name = f"TRAIN_{env_name}_{train_name}_{dt_string}"
-    #     tags, notes = get_user_input()
-    #
-    #     run = wandb.init(
-    #         project=wandb_project,
-    #         entity=wandb_entity,
-    #         job_type='Train',
-    #         name=run_name,
-    #         sync_tensorboard=True,
-    #         config=vars(train_args),
-    #         tags = tags,
-    #         notes = notes,
-    #         save_code=True,
-    #     )
-    #
-    #     save_model_path = f"Saved_Models/{env_name}/{train_name}/"
-    #     checkpoint_saver = CheckpointSaver(save_model_path, env_string= env_name, algo_string=train_name, decreasing=False, top_n=5)
-    #
-    #     outputs = train_agent(env_para, train_args, test_args, run, checkpoint_saver)
-    #     try:
-    #         add_final_notes(run)
-    #     except Exception:
-    #         pass
-    #     run.finish()
-    #
-    # if False:
-    #     dt_string = datetime.now().strftime("%m-%d_%H%M")
-    #     run_name = f"TEST_{env_name}_{test_name}_{dt_string}"
-    #     setattr(test_args,"artifact_name", artifact_name)
-    #     tags, notes = get_user_input()
-    #
-    #     run = wandb.init(
-    #         project=wandb_project,
-    #         entity=wandb_entity,
-    #         job_type='Test',
-    #         name=run_name,
-    #         sync_tensorboard=True,
-    #         config=vars(test_args),
-    #         tags = tags,
-    #         notes = notes,
-    #         save_code=True,
-    #     )
-    #     artifact = run.use_artifact(artifact_name, type='model')
-    #
-    #     test_outputs = test_from_artifact(run, test_args, env_para, artifact, store_history = True)
-    #     try:
-    #         add_final_notes(run)
-    #     except Exception:
-    #         pass
-    #     run.finish()
-    #
-    # if False:
-    #     dt_string = datetime.now().strftime("%m-%d_%H%M")
-    #     run_name = f"TEST_BP_{env_name}_{test_name}_{dt_string}"
-    #     tags, notes = get_user_input()
-    #
-    #     run = wandb.init(
-    #         project=wandb_project,
-    #         entity=wandb_entity,
-    #         job_type='Test',
-    #         name=run_name,
-    #         sync_tensorboard=True,
-    #         config=vars(test_args),
-    #         tags = tags,
-    #         notes = notes,
-    #         save_code=True,
-    #     )
-    #     test_outputs = test_BP(run, env_para, test_args, device= 'cpu')
-    #     try:
-    #         add_final_notes(run)
-    #     except Exception:
-    #         pass
-    #     run.finish()
-    #
-    # if False:
-    #     from testers import test_StaticPolicy
-    #
-    #     dt_string = datetime.now().strftime("%m-%d_%H%M")
-    #     run_name = f"TEST_SP_{env_name}_{test_name}_{dt_string}"
-    #     tags, notes = get_user_input()
-    #
-    #     run = wandb.init(
-    #         project=wandb_project,
-    #         entity=wandb_entity,
-    #         job_type='Test',
-    #         name=run_name,
-    #         sync_tensorboard=True,
-    #         config=vars(test_args),
-    #         tags=tags,
-    #         notes=notes,
-    #         save_code=True,
-    #     )
-    #     test_outputs = test_StaticPolicy(run, static_pol, env_para, test_args, device= 'cpu')
-    #     try:
-    #         add_final_notes(run)
-    #     except Exception:
-    #         pass
-    #     run.finish()
-
-
-
-
-def plot_qs_vs_time(test_history, merge = True):
-    from copy import deepcopy
-    import pandas as pd
-    q_dfs = []
-    for key, value in test_history.items():
-        if key is 'Env_seeds':
-            continue
-        else:
-            df = value
-            q_cols = [x for x in df.columns if "Q" in x]
-            qi_df = df.loc[:, q_cols]
-            q_dfs.append(qi_df)
-    if merge:
-        q_df = pd.concat(q_dfs).groupby(level = 0, axis = 'columns').mean()
-        fig = q_df.plot()
-        fig.show()
-        return q_dfs, q_df
-    else:
-        return q_dfs, None
 
 
 
