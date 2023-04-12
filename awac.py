@@ -3,10 +3,11 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 import os
+import gymnasium as gym
 import random
 import uuid
-import gym
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional
@@ -17,9 +18,11 @@ import pyrallis
 # My Library Imports
 from tqdm import tqdm
 from datetime import datetime
+from utils import get_stats
 
 # My Custom Library Imports
 from environment_init import make_MCMH_env
+from wandb_utils import wandb_plot_rewards_vs_time
 
 TensorBatch = List[torch.Tensor]
 
@@ -27,23 +30,23 @@ TensorBatch = List[torch.Tensor]
 @dataclass
 class TrainConfig:
     project: str = "CORL"
-    group: str = "Implementation"
+    group: str = "Implementation_4_12"
     name: str = "AWAC"
     checkpoints_path: Optional[str] = "Saved_Models/AWAC/"
 
     env_json_path: str = "JSON/Environment/CrissCross4v2.json"
     max_steps: int = 1000
-    bp_seed: int = 42
-    bp_envs: int = 10
+    pretrain_seed: int = 42
+    pretrain_envs: int = 1
     test_seed: int = 69
     deterministic_torch: bool = False
     device: str = "cpu"
 
     buffer_size: int = 2_000_000
-    num_train_ops: int = 1_000_000
+    num_train_ops: int = 10_000
     batch_size: int = 256
     eval_frequency: int = 1000
-    n_test_episodes: int = 10
+    n_test_episodes: int = 2
     normalize_reward: bool = False
 
     hidden_dim: int = 256
@@ -60,10 +63,6 @@ class TrainConfig:
             self.checkpoints_path = os.path.join(self.checkpoints_path, self.name)
 
 
-class BPMConfig:
-    num_steps: int = 1000
-    num_envs : int = 1
-    seed: int = 10101
 
 
 class ReplayBuffer:
@@ -355,24 +354,35 @@ def wrap_env(
 
 @torch.no_grad()
 def eval_actor(
-    env: gym.Env, actor: Actor, device: str, n_episodes: int, seed: int
+    env: gym.Env, actor: Actor, device: str, n_episodes: int, seed: int, record: bool = False,
 ) -> np.ndarray:
     actor.eval()
-    episode_rewards = []
+    episode_returns = []
+    if record:
+        rewards = []
     for _ in range(n_episodes):
         (state, info)= env.reset(seed = seed)
         done = False
-        episode_reward = 0.0
+        episode_return = 0.0
+        episode_rewards = []
         while not done:
             action = actor.act(state, device)
             state, reward, terminated, truncated, info = env.step(action)
-            episode_reward += reward
+            episode_return += reward
+            if record:
+                episode_rewards.append(reward.item())
             if terminated or truncated:
                 done = True
-        episode_rewards.append(episode_reward)
-
+        episode_returns.append(episode_return)
+        if record:
+            rewards.append(episode_rewards)
     actor.train()
-    return np.asarray(episode_rewards)
+    if record:
+
+        return np.asarray(episode_rewards).T, np.asarray(rewards).T
+    else:
+        return np.asarray(episode_returns).T
+
 
 
 def return_reward_range(dataset, max_episode_steps):
@@ -456,14 +466,16 @@ def gen_rollout(env, agent, length):
     }
 
 
-def gen_BP_dataset(env_para, config, M = True, device='cpu'):
-    from utils import plot_performance_vs_time
+def gen_pretrain_dataset(env_para, config, M = True, device='cpu'):
+    '''
+    Generate the pretraining dataset, currently this is done using BPM as the pretraining "Guide" algorithm
+    '''
     from environment_init import make_MCMH_env
     from NonDRLPolicies.Backpressure import MCMHBackPressurePolicy
 
     # init storage
     rollout_length = config.max_steps
-    n_envs = config.bp_envs
+    n_envs = config.pretrain_envs
     traj_dicts = []
 
 
@@ -474,7 +486,6 @@ def gen_BP_dataset(env_para, config, M = True, device='cpu'):
 
     with torch.no_grad():
         for n_env in range(n_envs):
-            print(f"Generating Rollout {n_env}/{n_envs}")
             traj_dicts.append(gen_rollout(env, agent, rollout_length))
     if n_envs > 1:
         dataset = {}
@@ -486,6 +497,22 @@ def gen_BP_dataset(env_para, config, M = True, device='cpu'):
         dataset = traj_dicts[0]
 
     return dataset
+
+def wb_plot_eval(rewards: np.ndarray, plot_id: str = "", column_modifier = ""):
+    t = list(range(rewards.shape[0]))
+    ys = rewards.T.tolist()
+    col_names = [f"{column_modifier}{i}" for i in range(rewards.shape[1])]
+    wandb.log({plot_id : wandb.plot.line_series(
+        xs = t,
+        ys = ys,
+        keys = col_names,
+    )})
+
+def wb_log_LTA(rewards: np.ndarray, series_name: str  =""):
+    t = list(range(rewards.shape[0]))
+    LTA_rewards, LTA_std = get_stats(rewards.T)
+    print("Here")
+
 
 
 
@@ -499,7 +526,7 @@ def train(config: TrainConfig):
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
-    dataset = gen_BP_dataset(env_para, config, M = True, device= config.device)
+    dataset = gen_pretrain_dataset(env_para, config, M=True, device=config.device)
 
     if config.normalize_reward:
         modify_reward(dataset, config.env_name)
@@ -555,30 +582,29 @@ def train(config: TrainConfig):
         with open(os.path.join(config.checkpoints_path, "config.yaml"), "w") as f:
             pyrallis.dump(config, f)
 
+    eval_LTA_data = {}
+
     for t in trange(config.num_train_ops, ncols=80):
         batch = replay_buffer.sample(config.batch_size)
         batch = [b.to(config.device) for b in batch]
         update_result = awac.update(batch)
         wandb.log(update_result, step=t)
         if (t + 1) % config.eval_frequency == 0:
-            eval_scores = eval_actor(
-                env, actor, config.device, config.n_test_episodes, config.test_seed
+            eval_returns, eval_rewards = eval_actor(
+                env, actor, config.device, config.n_test_episodes, config.test_seed, record = True
             )
 
-            wandb.log({"eval_score": eval_scores.mean()}, step=t)
-            wandb.log({"eval_LTA_reward": eval_scores.mean() / config.max_steps}, step = t)
-            if hasattr(env, "get_normalized_score"):
-                normalized_eval_scores = env.get_normalized_score(eval_scores) * 100.0
-                wandb.log(
-                    {"normalized_eval_score": normalized_eval_scores.mean()}, step=t
-                )
+            wandb.log({"eval_returns": eval_returns.mean()}, step=t)
+            wandb.log({"eval_LTA_reward": eval_returns.mean() / config.max_steps}, step = t)
+            eval_LTA_data[f"Eval_t({t+1})"] = pd.DataFrame(get_stats(eval_rewards), columns= ["LTA", "std"])
+
 
             if config.checkpoints_path is not None:
                 torch.save(
                     awac.state_dict(),
                     os.path.join(config.checkpoints_path, f"checkpoint_{t}.pt"),
                 )
-
+    returns, reward = eval_actor(env, actor, config.device, config.n_test_episodes, config.test_seed, record= True)
     wandb.finish()
 
 
