@@ -96,7 +96,6 @@ class CheckpointSaver:
 
 
 def wandb_plot_rewards_vs_time(rewards_vs_time, policy_name):
-    # NOT FINISHED NOR USED
     df = pd.DataFrame(rewards_vs_time, columns = [f"Env {e}" for e in range(rewards_vs_time.shape[1])])
     fig = df.plot(title = "Test Rewards vs Time", labels=dict(index="Time", value="Rewards"))
     # fig.show()
