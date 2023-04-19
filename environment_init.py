@@ -74,14 +74,15 @@ class HorizonScaledRewardWrapper(gym.RewardWrapper):
     def reward(self, reward):
         return reward / self.max_steps
 
-def make_MCMH_env(env_para, max_steps = None, time_scaled = False,
+def make_MCMH_env(env_para = None, config = None,
+                  max_steps = None, time_scaled = False,
                   moving_average = False, test = False,
                   no_state_penalty = False, min_reward = False,
                   delivered_rewards = False, horizon_scaled = False):
 
 
     def thunk():
-        env = MultiClassMultiHop(env_para)
+        env = MultiClassMultiHop(env_para, config)
         if max_steps is not None:
                 env = gym.wrappers.TimeLimit(env, max_episode_steps= max_steps)
         env = FlatActionWrapper(env)
@@ -136,4 +137,6 @@ def wrap_env(env, max_steps = None):
     env = gym.wrappers.RecordEpisodeStatistics(env)
     env = gym.wrappers.ClipAction(env)
     return env
+
+
 

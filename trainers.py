@@ -22,7 +22,7 @@ tqdm_config = {
 
 # Import custom methods
 from environment_init import make_MCMH_env
-from agent_init import Agent, Actor, Critic, AdvantageWeightedActorCritic
+from ppo_agent_init import Agent, Actor, Critic, AdvantageWeightedActorCritic
 from testers import agent_test
 
 class StopTrainingOnNoImprovement:

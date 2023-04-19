@@ -26,11 +26,16 @@ def parse_training_json(json_path, config_args):
     args.num_resets_per_env = args.total_timesteps // args.num_envs // args.num_steps_per_reset # total number of new trajectories seen per, not used - only for trackin
     return args
 
-def parse_env_json(json_path, config_args):
+def parse_env_json(json_path, config_args = None):
     para = json.load(open(json_path))
     env_para = para["problem_instance"]
-    for key, value in env_para.items():
-        setattr(config_args, f"env/{key}", value)
+    if config_args is not None:
+        if hasattr(config_args,'env'):
+            for key, value in env_para.items():
+                setattr(config_args.env, f"{key}", value)
+        else:
+            for key, value in env_para.items():
+                setattr(config_args, f"env/{key}", value)
     return env_para
 
 def parse_test_json(json_path, config_args):

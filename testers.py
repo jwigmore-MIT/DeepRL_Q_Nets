@@ -11,7 +11,7 @@ import wandb
 
 # Custom imports
 from environment_init import make_MCMH_env
-from agent_init import Agent
+from ppo_agent_init import Agent
 from wandb_utils import *
 from NonDRLPolicies.StaticPolicies import *
 

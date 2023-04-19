@@ -28,6 +28,10 @@ class MCMHBackPressurePolicy(nn.Module):
 
     def forward(self, state : dict, old_state = None):
         return self._forward(state, old_state)
+
+    def act(self, state: dict, old_state=None):
+        return self._forward(state, old_state)
+
     def _forward(self, state : dict, old_state = None):
         #state = keys_to_ints(batch_state)
         state = state
@@ -69,10 +73,10 @@ class MCMHBackPressurePolicy(nn.Module):
     # initialize the problem
     def Formulate(self, state):
         # check if state is tianshou's Batch({obs: , info:})
-        if 'obs' in state:
-            # check if flattened
-            if hasattr(state.obs, 'ndim') and state.obs.ndim == 3:
-                state = self.env.unflatten_obs(state.obs[0,0,:])
+        # if 'obs' in state:
+        #     # check if flattened
+        #     if hasattr(state.obs, 'ndim') and state.obs.ndim == 3:
+        #         state = self.env.unflatten_obs(state.obs[0,0,:])
         if isinstance(state, np.ndarray):
             state = self.env.unflatten_obs(state)
 

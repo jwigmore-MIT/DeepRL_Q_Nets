@@ -33,10 +33,16 @@ class MultiClassMultiHop(gym.Env):
     flattened versions
     This all inputs/returns for external facing functions return flattened arrays
     '''
-    def __init__(self, net_para,space_para: dict = None, **kwargs):
+    def __init__(self, net_para = None, config = None,  space_para: dict = None, **kwargs):
         super(MultiClassMultiHop, self).__init__()
 
+        # initialize from config
+        if config is not None:
+            attrs = [a for a in dir(config.env) if not a.startswith('__')]
+            net_para = {attr: getattr(config.env, attr) for attr in attrs}
+
         self.name = net_para.get('name',None)
+
 
         # topology information
         self.nodes = eval(net_para['nodes'])  # nodes <list>
@@ -105,8 +111,12 @@ class MultiClassMultiHop(gym.Env):
         self.action_space = spaces.Dict(
             {link: spaces.Dict({cls: spaces.Box(low=0, high=self.max_actions[link][cls], dtype=int) for cls in self.classes.keys()}) for
              link, class_dict in self.max_actions.items()})
+        self.action_space_size = spaces.utils.flatten_space(self.action_space).shape[0]
         # Trick to get the number of states minus
         self.flat_qspace_size = len(self.get_flat_arrival_keys())
+        if config is not None:
+            setattr(config.env, "flat_state_dim", self.obs_space_size)
+            setattr(config.env, "flat_action_dim", self.action_space_size)
 
     def _make_graph(self):
         graph = {}
