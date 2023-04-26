@@ -82,7 +82,7 @@ class MCMHBackPressurePolicy(nn.Module):
 
         Q = keys_to_ints(state['Q'])
         #Cap = keys_to_ints(state['Cap'])
-        Cap = state['Cap']
+        Cap = self.env.Cap
 
         # determine the optimal class for each link
         opt_ij = {}  # (i,j): (number of optimal class for (i,j) :  weight (W_ij))

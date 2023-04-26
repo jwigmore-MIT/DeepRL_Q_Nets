@@ -65,7 +65,7 @@ if __name__ == "__main__":
     train_name = train_param_path.split("/")[-1].replace(".json","")
     train_args = parse_training_json(train_param_path)
 
-    env_param_path = "JSON/Environment/CrissCross2.json"
+    env_param_path = "JSON/Environment/Old/CrissCross2.json"
     env_name = env_param_path.split("/")[-1].replace(".json","")
     env_para = parse_env_json(env_param_path)
 

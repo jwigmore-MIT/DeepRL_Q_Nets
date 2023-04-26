@@ -42,7 +42,7 @@ class MultiClassMultiHop(gym.Env):
             net_para = {attr: getattr(config.env, attr) for attr in attrs}
 
         self.name = net_para.get('name',None)
-
+        self.t = 0
 
         # topology information
         self.nodes = eval(net_para['nodes'])  # nodes <list>
@@ -101,7 +101,7 @@ class MultiClassMultiHop(gym.Env):
 
         self.observation_space = spaces.Dict({
             'Q': Q_space,
-            'Cap': Cap_space,
+            #'Cap': Cap_space,
         })
         flat_obs_space = spaces.utils.flatten_space(self.observation_space)
         self.obs_space_size = flat_obs_space.shape[0]  # the size of the state space

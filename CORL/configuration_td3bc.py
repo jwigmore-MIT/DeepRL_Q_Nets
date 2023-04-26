@@ -9,7 +9,7 @@ import os
 class WandbConfig:
     project: str = "Offline_Online_RL"
     group: str = "4.24c"
-    name: str = "AWAC"
+    name: str = "TD3_BC"
     checkpoints_path: Optional[str] = "../Saved_Models/AWAC/"
 
 @dataclass
@@ -48,14 +48,17 @@ class TestConfig:
 
 @dataclass
 class OfflineTrainConfig:
-    num_epochs: int =  100
+    num_epochs: int =  500
     eval_freq: int = 5 # how often to evaluate the policy during training in terms of epochs
     reward_log_freq: int = 10 # how often to log the reward in terms of epochs
     batch_size: int = 1000
     learning_rate: float = 3e-4
     gamma: float = 0.99
-    tau: float = 5e-3
-    awac_lambda: float = 1.0
+    tau: float = 5e-2 # target network update rate
+    policy_noise: float = 0.2  # Noise added to target actor during critic update
+    noise_clip: float = 0.5  # Range to clip target actor noise
+    policy_freq: int = 2  # Frequency of delayed actor update
+    alpha: float = 2.5  # Coefficient for Q function in actor loss
     num_samples: int = 0
 
     def __post_init__(self):

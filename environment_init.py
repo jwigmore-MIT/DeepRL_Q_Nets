@@ -75,7 +75,7 @@ class HorizonScaledRewardWrapper(gym.RewardWrapper):
         return reward / self.max_steps
 
 def make_MCMH_env(env_para = None, config = None,
-                  max_steps = None, time_scaled = False,
+                  max_steps = None, record_stats = True, time_scaled = False,
                   moving_average = False, test = False,
                   no_state_penalty = False, min_reward = False,
                   delivered_rewards = False, horizon_scaled = False):
@@ -88,7 +88,8 @@ def make_MCMH_env(env_para = None, config = None,
         env = FlatActionWrapper(env)
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
         #env = FlatObservationWrapper(env)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
+        if False and record_stats:
+            env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ClipAction(env)
         #env = gym.wrappers.NormalizeObservation(env)
         #env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))

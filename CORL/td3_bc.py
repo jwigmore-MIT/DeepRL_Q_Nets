@@ -21,10 +21,10 @@ from datetime import datetime
 # My Custom Library Imports
 from environment_init import make_MCMH_env
 from param_extractors import parse_env_json
-from configuration import Config
+from configuration_td3bc import Config
 from buffer import init_replay_buffer
 from rollout import gen_rollout
-from awac_agents import AdvantageWeightedActorCritic, Actor, Critic
+from td3_bc_agents import Actor, Critic, TD3_BC
 from wrappers import wrap_env
 
 
@@ -166,47 +166,55 @@ def wandb_init(config: dict) -> None:
 
 
 
-
-
-def gen_awac(actor_critic_kwargs, config):
-    actor = Actor(**actor_critic_kwargs)
+def gen_td3_bc(kwargs, config):
+    actor = Actor(kwargs["state_dim"], kwargs["action_dim"], kwargs["max_action"])
     actor.to(config.device)
     actor_optimizer = torch.optim.Adam(actor.parameters(), lr=config.offline_train.learning_rate)
-    critic_1 = Critic(**actor_critic_kwargs)
-    critic_2 = Critic(**actor_critic_kwargs)
-    critic_1.to(config.device)
-    critic_2.to(config.device)
+
+    critic_1 = Critic(kwargs["state_dim"], kwargs["action_dim"]).to(config.device)
     critic_1_optimizer = torch.optim.Adam(critic_1.parameters(), lr=config.offline_train.learning_rate)
+    critic_2 = Critic(kwargs["state_dim"], kwargs["action_dim"]).to(config.device)
     critic_2_optimizer = torch.optim.Adam(critic_2.parameters(), lr=config.offline_train.learning_rate)
 
-    awac = AdvantageWeightedActorCritic(
-        actor=actor,
-        actor_optimizer=actor_optimizer,
-        critic_1=critic_1,
-        critic_1_optimizer=critic_1_optimizer,
-        critic_2=critic_2,
-        critic_2_optimizer=critic_2_optimizer,
-        gamma=config.offline_train.gamma,
-        tau=config.offline_train.tau,
-        awac_lambda=config.offline_train.awac_lambda,
-    )
+    td_kwargs = {
+        "max_action": kwargs["max_action"],
+        "actor": actor,
+        "actor_optimizer": actor_optimizer,
+        "critic_1": critic_1,
+        "critic_1_optimizer": critic_1_optimizer,
+        "critic_2": critic_2,
+        "critic_2_optimizer": critic_2_optimizer,
+        "discount": config.offline_train.gamma,
+        "tau": config.offline_train.tau,
+        "device": config.device,
+        # TD3
+        "policy_noise": config.offline_train.policy_noise * max_action,
+        "noise_clip": config.offline_train.noise_clip * max_action,
+        "policy_freq": config.offline_train.policy_freq,
+        # TD3 + BC
+        "alpha": config.offline_train.alpha,
+    }
 
-    return awac
+    td3_trainer = TD3_BC(**td_kwargs)
+    return td3_trainer
 
-def load_awac_checkpoint(env, config, checkpoint_path):
+
+def load_td3_checkpoint(env, config, checkpoint_path):
     # Load agent if needed
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
+    max_action = env.action_space.high.max()
     actor_critic_kwargs = {
         "state_dim": state_dim,
         "action_dim": action_dim,
         "hidden_dim": config.neural_net.hidden_dim,
+        "max_action": max_action,
     }
 
-    awac: AdvantageWeightedActorCritic = gen_awac(actor_critic_kwargs, config)
+    td3_trainer: TD3_BC = gen_td3_bc(actor_critic_kwargs, config)
 
-    awac.load_state_dict(torch.load(checkpoint_path))
-    return awac
+    td3_trainer.load_state_dict(torch.load(checkpoint_path))
+    return td3_trainer
 
 
 
@@ -219,15 +227,12 @@ def offline_train(config: Config, env = None, replay_buffer = None, agent = None
     else:
         env = deepcopy(env)
 
+    max_action = env.action_space.high.max()
     # initialize replay buffer
     if replay_buffer is None:
         raise Warning("Offline Training: No replay buffer given. Generating based on config")
         replay_buffer = init_replay_buffer(config, how = "gen")
 
-    # Normalize States
-    # if config.normalize_states:
-    #     replay_buffer.compute_state_mean_std()
-    #     env = wrap_env(env, state_mean=replay_buffer.get_state_mean(), state_std=replay_buffer.get_state_std())
 
     ## Initialize awac agent
     if agent is None:
@@ -278,7 +283,7 @@ def offline_train(config: Config, env = None, replay_buffer = None, agent = None
 
             # Test current Policy
             eps_rewards, rewards_log  = eval_actor(
-                env, agent._actor, config.device, config.eval.num_steps, config.eval.eval_episodes, config.eval.eval_seed, pbar = pbar, log = config.eval.log
+                env, agent.actor, config.device, config.eval.num_steps, config.eval.eval_episodes, config.eval.eval_seed, pbar = pbar, log = config.eval.log
             )
             # Check if best checkpoint
             eps_LTA_reward = eps_rewards.mean() / config.eval.num_steps
@@ -332,9 +337,10 @@ def online_train(config: Config, env = None,  replay_buffer = None, agent = None
             "state_dim": config.env.flat_state_dim,
             "action_dim": config.env.flat_action_dim,
             "hidden_dim": config.neural_net.hidden_dim,
+            "max_action": env.action_space.high.max(),
         }
 
-        agent = gen_awac(actor_critic_kwargs, config)
+        agent = gen_td3_bc(actor_critic_kwargs, config)
     agent.grad_clip = False
     # Initialize Weights and Biases
     if wandb.run is None:
@@ -363,14 +369,9 @@ def online_train(config: Config, env = None,  replay_buffer = None, agent = None
     log_df = None
     ## Online Training Loop
     pbar = tqdm(range(0,config.online_train.num_epochs, 1), ncols=80, desc="Online Training")
-    actor1 = deepcopy(agent._actor)
     for epoch in pbar:
-        # Use agent to generate a rollout
-        if epoch < 0:
-            actor = actor1
-        else:
-            actor= agent._actor
-        rollout = gen_rollout(env, actor, config.online_train.rollout_length, init_reset= config.online_train.reset_env, show_pbar= False)
+
+        rollout = gen_rollout(env, agent.actor, config.online_train.rollout_length, init_reset= config.online_train.reset_env, show_pbar= False)
 
         # Add rollout to replay buffer
         replay_buffer.add_transitions(deepcopy(rollout), normalize= True, debug = True)
@@ -396,7 +397,7 @@ def online_train(config: Config, env = None,  replay_buffer = None, agent = None
 
                 # Test current Policy
                 eps_rewards, rewards_log = eval_actor(
-                    env, actor, config.device, config.eval.num_steps, config.eval.eval_episodes,
+                    env, agent.actor, config.device, config.eval.num_steps, config.eval.eval_episodes,
                     config.eval.eval_seed, pbar=pbar, log=config.eval.log
                 )
                 eps_LTA_reward = eps_rewards.mean() / config.eval.num_steps
@@ -441,7 +442,7 @@ def online_train(config: Config, env = None,  replay_buffer = None, agent = None
 
 RUN_SETTINGS = {
     "Dataset": "load", # "gen", "load"
-    "Train": ["offline","online"], # ["offline","load","online"]
+    "Train": ["offline"], # ["offline","load","online"]
     "Load": "Saved_Models/AWAC-04-25_1149/epoch_0.pt",#"Saved_Models/AWAC-04-24_1624/epoch_-50.pt",
     "Test": ["from_train", "best"]#["from_train", "best"]
 
@@ -472,7 +473,7 @@ if __name__ == "__main__":
     parse_env_json(config.env.env_json_path, config)
     base_env = MultiClassMultiHop(config = config)
     data_gen_env = wrap_env(base_env, state_mean=None, state_std=None)
-
+    max_action = data_gen_env.action_space.high.max()
 
     ## Generate or Load the offline dataset
     replay_buffer, batch_reward_log = init_replay_buffer(config, how = RUN_SETTINGS["Dataset"], env = data_gen_env)
@@ -485,9 +486,10 @@ if __name__ == "__main__":
         "state_dim": config.env.flat_state_dim,
         "action_dim": config.env.flat_action_dim,
         "hidden_dim": config.neural_net.hidden_dim,
+        "max_action": max_action
     }
 
-    agent = gen_awac(actor_critic_kwargs, config)
+    agent = gen_td3_bc(actor_critic_kwargs, config)
     #wandb.watch(agent._actor, log="all", log_freq=100)
 
     ## Offline Training
@@ -496,7 +498,7 @@ if __name__ == "__main__":
         agent, offline_best = offline_train(config, env = offline_env, replay_buffer = replay_buffer, agent=agent)
         offline_agent = deepcopy(agent)
     elif "load" in RUN_SETTINGS["Train"]:
-        agent = load_awac_checkpoint(train_env, config, checkpoint_path= RUN_SETTINGS["Load"])
+        agent = load_td3_checkpoint(train_env, config, checkpoint_path= RUN_SETTINGS["Load"])
     if "online" in RUN_SETTINGS["Train"]:
         online_env = wrap_env(MultiClassMultiHop(config=config), state_mean=None, state_std=None) #make_MCMH_env(config = config, record_stats = config.online_train.reset_env)()
         agent, online_best, replay_buffer = online_train(config, env = online_env, replay_buffer=replay_buffer, agent = agent)
@@ -504,27 +506,27 @@ if __name__ == "__main__":
 
     test_env = wrap_env(deepcopy(base_env), None, None)
     if RUN_SETTINGS["Test"] == "load":
-        agent = load_awac_checkpoint(base_env, config, checkpoint_path= "Saved_Models/AWAC-04-24_2035/epoch_-5.pt")
-        test_actor(deepcopy(test_env), agent._actor, device=config.device, n_steps=config.test.n_steps,
+        agent = load_td3_checkpoint(base_env, config, checkpoint_path= "Saved_Models/AWAC-04-24_2035/epoch_-5.pt")
+        test_actor(deepcopy(test_env), agent.actor, device=config.device, n_steps=config.test.n_steps,
                    n_eps=config.test.test_episodes, seed=config.test.test_seed)
     if "from_train" in RUN_SETTINGS["Test"]:
         if "offline" in RUN_SETTINGS["Train"]:
-            test_actor(deepcopy(test_env), offline_agent._actor, device=config.device, n_steps=config.test.n_steps,
+            test_actor(deepcopy(test_env), offline_agent.actor, device=config.device, n_steps=config.test.n_steps,
                    n_eps=config.test.test_episodes, seed=config.test.test_seed, agent_name= "Final Offline")
             if "best" in RUN_SETTINGS["Test"]:
-                test_actor(deepcopy(test_env), offline_best["agent"]._actor, device=config.device, n_steps=config.test.n_steps,
+                test_actor(deepcopy(test_env), offline_best["agent"].actor, device=config.device, n_steps=config.test.n_steps,
                            n_eps=config.test.test_episodes, seed=config.test.test_seed, agent_name= "Best Offline")
         if "online" in RUN_SETTINGS["Train"]:
-            test_actor(deepcopy(test_env), online_agent._actor, device=config.device, n_steps=config.test.n_steps,
+            test_actor(deepcopy(test_env), online_agent.actor, device=config.device, n_steps=config.test.n_steps,
                    n_eps=config.test.test_episodes, seed=config.test.test_seed, agent_name= "Final Online")
             if "best" in RUN_SETTINGS["Test"]:
-                test_actor(deepcopy(test_env), online_best["agent"]._actor, device=config.device, n_steps=config.test.n_steps,
+                test_actor(deepcopy(test_env), online_best["agent"].actor, device=config.device, n_steps=config.test.n_steps,
                            n_eps=config.test.test_episodes, seed=config.test.test_seed, agent_name= "Best Online")
 
     elif RUN_SETTINGS["Test"] == "multi":
         for model_path in MULTI_TEST_PATHS:
-            awac = load_awac_checkpoint(base_env, config, checkpoint_path= model_path)
-            test_actor(deepcopy(test_env), awac._actor, device=config.device, n_steps=config.test.n_steps,
+            awac = load_td3_checkpoint(base_env, config, checkpoint_path= model_path)
+            test_actor(deepcopy(test_env), agent.actor, device=config.device, n_steps=config.test.n_steps,
                           n_eps=config.test.test_episodes, seed=config.test.test_seed)
 
     wandb.finish()

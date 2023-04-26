@@ -69,7 +69,7 @@ if __name__ == "__main__":
     config = Config
 
     # Setup environment
-    env_json_path = "../JSON/Environment/CrissCross4v2.json"
+    env_json_path = "../JSON/Environment/Env1a.json"
     env_para = parse_env_json(env_json_path)
     #env = MultiClassMultiHop(env_para) # Non-wrapped
     env = make_MCMH_env(env_para, max_steps= config.offline.max_steps)()
