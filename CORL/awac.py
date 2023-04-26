@@ -21,7 +21,7 @@ from datetime import datetime
 # My Custom Library Imports
 from environment_init import make_MCMH_env
 from param_extractors import parse_env_json
-from configuration import Config
+from configuration_AWAC import Config
 from buffer import init_replay_buffer
 from rollout import gen_rollout
 from awac_agents import AdvantageWeightedActorCritic, Actor, Critic
@@ -122,7 +122,7 @@ def log_rewards(rewards_log, policy_name = "policy", glob = "test", hidden = Fal
     #wandb.log({"test_rewards_table": table})
     return df
 
-def log_rollouts(rollout, log_df = None,  policy_name = "policy", glob = "test", hidden = False):
+def log_rollouts(rollout, log_df = None,  policy_name = "policy", glob = "test", epoch = None, hidden = False):
     if log_df is None:
         log_df = pd.DataFrame(rollout["rewards"], columns= ["rewards"])
         wandb.define_metric(f"{glob}/step")
@@ -139,6 +139,8 @@ def log_rollouts(rollout, log_df = None,  policy_name = "policy", glob = "test",
             f"{glob}/step": i,
             f"{glob}/LTA - {policy_name}": log_df["LTA_Rewards"].loc[i],
         }
+        if epoch is not None and i == start_step:
+            log_dict[f"{glob}/epoch"] = epoch
         wandb.log(log_dict)
     eps_LTA_reward = log_df["LTA_Rewards"].iloc[-1]
     return log_df, eps_LTA_reward
@@ -306,7 +308,7 @@ def offline_train(config: Config, env = None, replay_buffer = None, agent = None
                 log_rewards(rewards_log, policy_name=f"Eval epoch={epoch}", glob = "eval", hidden  = True)
 
             # Save agent checkpoint
-            if config.checkpoints_path is not None:
+            if config.checkpoints_path is not None and (epoch + 1) % config.offline_train.save_freq == 0:
                 torch.save(
                     agent.state_dict(),
                     os.path.join(config.checkpoints_path, f"epoch_{epoch}.pt"),
@@ -412,9 +414,10 @@ def online_train(config: Config, env = None,  replay_buffer = None, agent = None
 
         else:
             # Log rollout as policy performance
-            log_df, eps_LTA_reward = log_rollouts(rollout, log_df, policy_name="Online Agent", glob="rollout")
+            log_df, eps_LTA_reward = log_rollouts(rollout, log_df, policy_name="Online Agent", glob="rollout", epoch = epoch)
             #eps_LTA_reward = rollout["rewards"].sum()/config.online_train.rollout_length
             update_result.update({"eval_LTA_reward": eps_LTA_reward})
+
 
         if best_checkpoint is None or eps_LTA_reward > best_checkpoint["LTA_reward"]:
             best_checkpoint = {
@@ -443,25 +446,26 @@ def online_train(config: Config, env = None,  replay_buffer = None, agent = None
     return agent, best_checkpoint, replay_buffer
 
 
-RUN_SETTINGS = {
-    "Dataset": ["BPM"], # "BPM", "load", "random"
-    "Train": [], #["offline","online"], # ["offline","load","online"]
-    "Load": "Saved_Models/AWAC-lambda0.3-04-26_0800/epoch_-45.pt",#"Saved_Models/AWAC-04-24_1624/epoch_-50.pt",
-    "Test": []#["from_train", "best"]#["from_train", "best"]
-}
+# RUN_SETTINGS = {
+#     "Dataset": ["load"], # "BPM", "load", "random"
+#     "Train": ["offline"], #["offline","online"], # ["offline","load","online"]
+#     "Load": "Saved_Models/AWAC-lambda0.3-04-26_0800/epoch_-45.pt",#"Saved_Models/AWAC-04-24_1624/epoch_-50.pt",
+#     "Test": ["from_train", "best"]#["from_train", "best"]
+# }
 
-MULTI_TEST_PATHS = []
-RUN_SETTINGS.update({"Multi_Test": MULTI_TEST_PATHS})
+
 
 if __name__ == "__main__":
-
-
+    from Run_Settings import RUN_SETTINGS
+    MULTI_TEST_PATHS = []
+    RUN_SETTINGS.update({"Multi_Test": MULTI_TEST_PATHS})
 
 
     print(f"Running with settings: {RUN_SETTINGS}")
 
     ## Get configuration parameters
     config = Config()
+    config.run_settings = RUN_SETTINGS
     # set each attribute of config.run based on RUN_SETTINGS
     for k, v in RUN_SETTINGS.items(): setattr(config.run, k, v)
 
@@ -480,9 +484,11 @@ if __name__ == "__main__":
     replay_buffer, batch_reward_logs = init_replay_buffer(config, how = RUN_SETTINGS["Dataset"], env = data_gen_env)
 
     train_env = wrap_env(deepcopy(base_env), replay_buffer.get_state_mean(), replay_buffer.get_state_std())
-    if len(RUN_SETTINGS["Dataset"]) > 1:
-        for i in range(len(RUN_SETTINGS["Dataset"])):
-            log_rewards(batch_reward_logs[RUN_SETTINGS["Dataset"][i]], RUN_SETTINGS["Dataset"][i])
+
+    for i in range(len(RUN_SETTINGS["Dataset"])):
+        log_rewards(batch_reward_logs[RUN_SETTINGS["Dataset"][i]], RUN_SETTINGS["Dataset"][i])
+
+
 
 
     ## Create agent
@@ -501,7 +507,7 @@ if __name__ == "__main__":
         agent, offline_best = offline_train(config, env = offline_env, replay_buffer = replay_buffer, agent=agent)
         offline_agent = deepcopy(agent)
     elif "load" in RUN_SETTINGS["Train"]:
-        agent = load_awac_checkpoint(train_env, config, checkpoint_path= RUN_SETTINGS["Load"])
+        agent = load_awac_checkpoint(train_env, config, checkpoint_path= RUN_SETTINGS["LoadModel"])
     if "online" in RUN_SETTINGS["Train"]:
         online_agent = gen_awac(actor_critic_kwargs, config.online_train)
         online_agent.load_state_dict(agent.state_dict())
@@ -534,6 +540,10 @@ if __name__ == "__main__":
             awac = load_awac_checkpoint(base_env, config, checkpoint_path= model_path)
             test_actor(deepcopy(test_env), awac._actor, device=config.device, n_steps=config.test.n_steps,
                           n_eps=config.test.test_episodes, seed=config.test.test_seed)
+
+
+    if config.save_final_buffer:
+        pickle.dump(replay_buffer, open(f"saved_buffers/{config.run_name}.pkl", "wb"))
 
     wandb.finish()
 
