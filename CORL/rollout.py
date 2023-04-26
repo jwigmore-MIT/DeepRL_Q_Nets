@@ -100,3 +100,43 @@ def gen_bp_dataset(config, M = True, env = None):
         print(f"{data_name} dumped to {data_path}")
 
     return dataset, datainfo
+
+def gen_random_action_dataset(config, env = None):
+    from environment_init import make_MCMH_env
+    from NonDRLPolicies.Randomized_policy import RandomPolicy
+
+    # init storage
+    rollout_length = config.offline_data.rollout_length
+    num_rollouts = config.offline_data.num_rollouts
+    traj_dicts = []
+
+    # Initialize BP 'Agent'
+    env = deepcopy(env)
+    agent = RandomPolicy(env)
+
+    with torch.no_grad():
+        for n_rollout in range(num_rollouts):
+            traj_dicts.append(gen_rollout(env, agent, rollout_length, frac = f"{n_rollout + 1}/{num_rollouts}"))
+    if num_rollouts > 1:
+        dataset = {}
+        for key, value in traj_dicts[0].items():
+            dataset[key] = value
+            for n_rollout in range(1, num_rollouts):
+                dataset[key] = np.concatenate([dataset[key], traj_dicts[n_rollout][key]], axis = 0)
+    else:
+        dataset = traj_dicts[0]
+
+    if config.offline_data.save_path is not None:
+        datainfo = {
+            "rollout_length": config.offline_data.rollout_length,
+            "num_rollouts": config.offline_data.num_rollouts,
+        }
+        data = {"dataset": dataset, "info": datainfo}
+
+        data_name = f"{config.env.name}_{config.name}" # Environment_wandb-name
+        data_path =os.path.join(config.offline_data.save_path,data_name +".data")
+
+        pickle.dump(data, open(data_path,'wb'))
+        print(f"{data_name} dumped to {data_path}")
+
+    return dataset, datainfo

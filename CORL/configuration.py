@@ -7,9 +7,9 @@ import os
 
 @dataclass
 class WandbConfig:
-    project: str = "Offline_Online_RL"
-    group: str = "4.24c"
-    name: str = "AWAC"
+    project: str = "4.25_Meeting"
+    group: str = "Post_Meeting"
+    name: str = "AWAC-large_BPM_dataset"
     checkpoints_path: Optional[str] = "../Saved_Models/AWAC/"
 
 @dataclass
@@ -21,10 +21,10 @@ class EnvConfig:
 
 @dataclass
 class OfflineDataConfig:
-    load_path: str = "offline_data/Env1b_AWAC-04-25_1135.data" # "offline_data\\CrissCross4v2_AWAC-04-18_1546.data"
+    load_path: str = "offline_data/Env1b_AWAC-lambda0.3-04-26_0735.data" # "offline_data\\CrissCross4v2_AWAC-04-18_1546.data"
     save_path: str = "offline_data"
-    rollout_length: int = 1000
-    num_rollouts: int = 5
+    rollout_length: int = 10000
+    num_rollouts: int = 100
     bp_seed: int = 102921
     num_transitions: int = 0
     modified: bool = False # if these parameters are changed at run-time i.e. the data loaded used different parameters during its generation
@@ -67,6 +67,7 @@ class OnlineTrainConfig:
     num_epochs = 100
     reset_env = False
     record_rollout: bool = True
+    save_freq: int = 10
     eval_freq: int = 5
     reward_log_freq: int = 10 # how often to evaluate the policy during training in terms of epochs
     rollout_length = 1000

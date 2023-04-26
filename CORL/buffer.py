@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from typing import Any, Dict, List, Optional, Tuple, Union
-from rollout import gen_bp_dataset
+from rollout import gen_bp_dataset, gen_random_action_dataset
 from copy import deepcopy
 import pickle
 TensorBatch = List[torch.Tensor]
@@ -177,8 +177,8 @@ def init_replay_buffer(config, how = "gen", env = None):# need to normalize rewa
     and standard deviation of the state observations using the `set_state_mean_std()` method, and returns the replay buffer object
     along with the reward log array.
     """
-    if how not in ["gen", "load", "empty"]:
-        raise ValueError("how must be in ['gen', 'load', 'empty']")
+    # if how not in ["BPM", "load", "random", "empty"]:
+    #     raise ValueError("how must be in ['BPM', 'random', 'load', 'empty']")
 
     replay_buffer = ReplayBuffer(
         config.env.flat_state_dim,
@@ -186,13 +186,16 @@ def init_replay_buffer(config, how = "gen", env = None):# need to normalize rewa
         config.buffer_size,
         config.device,
     )
-
-    if how is "gen":
-        dataset, datainfo = gen_bp_dataset(config, M=True, env = env)
+    datasets = {}
+    datainfos ={}
+    if "BPM" in how:
+        datasets["BPM"], datainfos["BPM"] = gen_bp_dataset(config, M=True, env = env)
+    if "random" in how:
+        datasets["random"], datainfos["random"] = gen_random_action_dataset(config, env = env)
     elif how is "load":
         data = pickle.load(open(config.offline_data.load_path, 'rb'))
-        dataset = data["dataset"]
-        datainfo = data["info"]
+        datasets["load"] = data["dataset"]
+        datainfos["load"] = data["info"]
     elif how is "empty":
         return replay_buffer, None
 
@@ -207,12 +210,21 @@ def init_replay_buffer(config, how = "gen", env = None):# need to normalize rewa
     # else:
     #     state_mean, state_std = None, None
     # For reward logging
-    terminal_indices = np.where(dataset["terminals"] == 1)[0] + 1
-    reward_log = np.array(np.split(dataset["rewards"], terminal_indices[:-1]))[:, :, 0].T
-
+    reward_logs = {}
+    terminal_indices = {}
+    for key, dataset in datasets.items():
+        terminal_indices[key] = np.where(dataset["terminals"] == 1)[0] + 1
+        reward_logs[key] = np.array(np.split(dataset["rewards"], terminal_indices[key][:-1]))[:, :, 0].T
+    combined_dataset = None
+    for key, dataset in datasets.items():
+        if combined_dataset is None:
+            combined_dataset = deepcopy(dataset)
+        else:
+            for key2, value2 in dataset.items():
+                combined_dataset[key2] = np.concatenate([combined_dataset[key2], value2], axis = 0)
     replay_buffer.load_dataset(dataset, normalize_states = config.normalize_states)
     #replay_buffer.compute_state_mean_std()
 
-    return replay_buffer, reward_log
+    return replay_buffer, reward_logs
 
 

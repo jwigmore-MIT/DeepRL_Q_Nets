@@ -168,16 +168,16 @@ def wandb_init(config: dict) -> None:
 
 
 
-def gen_awac(actor_critic_kwargs, config):
+def gen_awac(actor_critic_kwargs, train_config):
     actor = Actor(**actor_critic_kwargs)
     actor.to(config.device)
-    actor_optimizer = torch.optim.Adam(actor.parameters(), lr=config.offline_train.learning_rate)
+    actor_optimizer = torch.optim.Adam(actor.parameters(), lr=train_config.learning_rate)
     critic_1 = Critic(**actor_critic_kwargs)
     critic_2 = Critic(**actor_critic_kwargs)
     critic_1.to(config.device)
     critic_2.to(config.device)
-    critic_1_optimizer = torch.optim.Adam(critic_1.parameters(), lr=config.offline_train.learning_rate)
-    critic_2_optimizer = torch.optim.Adam(critic_2.parameters(), lr=config.offline_train.learning_rate)
+    critic_1_optimizer = torch.optim.Adam(critic_1.parameters(), lr=train_config.learning_rate)
+    critic_2_optimizer = torch.optim.Adam(critic_2.parameters(), lr=train_config.learning_rate)
 
     awac = AdvantageWeightedActorCritic(
         actor=actor,
@@ -186,14 +186,14 @@ def gen_awac(actor_critic_kwargs, config):
         critic_1_optimizer=critic_1_optimizer,
         critic_2=critic_2,
         critic_2_optimizer=critic_2_optimizer,
-        gamma=config.offline_train.gamma,
-        tau=config.offline_train.tau,
-        awac_lambda=config.offline_train.awac_lambda,
+        gamma=train_config.gamma,
+        tau=train_config.tau,
+        awac_lambda=train_config.awac_lambda,
     )
 
     return awac
 
-def load_awac_checkpoint(env, config, checkpoint_path):
+def load_awac_checkpoint(env, config, checkpoint_path, on_off = "on"):
     # Load agent if needed
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
@@ -202,8 +202,12 @@ def load_awac_checkpoint(env, config, checkpoint_path):
         "action_dim": action_dim,
         "hidden_dim": config.neural_net.hidden_dim,
     }
+    if on_off == "on":
+        train_config = config.online_train
+    elif on_off == "off":
+        train_config = config.offline_train
 
-    awac: AdvantageWeightedActorCritic = gen_awac(actor_critic_kwargs, config)
+    awac: AdvantageWeightedActorCritic = gen_awac(actor_critic_kwargs, train_config)
 
     awac.load_state_dict(torch.load(checkpoint_path))
     return awac
@@ -426,12 +430,12 @@ def online_train(config: Config, env = None,  replay_buffer = None, agent = None
                 )
         pbar.set_description("Online Training")
 
-        # Save agent checkpoint
-        if config.checkpoints_path is not None:
-            torch.save(
-                agent.state_dict(),
-                os.path.join(config.checkpoints_path, f"epoch_{epoch}.pt"),
-            )
+        if epoch % config.online_train.save_freq:# Save agent checkpoint
+            if config.checkpoints_path is not None:
+                torch.save(
+                    agent.state_dict(),
+                    os.path.join(config.checkpoints_path, f"epoch_{epoch}.pt"),
+                )
         wandb.log(update_result)
 
 
@@ -440,12 +444,10 @@ def online_train(config: Config, env = None,  replay_buffer = None, agent = None
 
 
 RUN_SETTINGS = {
-    "Dataset": "load", # "gen", "load"
-    "Train": ["offline","online"], # ["offline","load","online"]
-    "Load": "Saved_Models/AWAC-04-25_1149/epoch_0.pt",#"Saved_Models/AWAC-04-24_1624/epoch_-50.pt",
-    "Test": ["from_train", "best"]#["from_train", "best"]
-
-
+    "Dataset": ["BPM"], # "BPM", "load", "random"
+    "Train": [], #["offline","online"], # ["offline","load","online"]
+    "Load": "Saved_Models/AWAC-lambda0.3-04-26_0800/epoch_-45.pt",#"Saved_Models/AWAC-04-24_1624/epoch_-50.pt",
+    "Test": []#["from_train", "best"]#["from_train", "best"]
 }
 
 MULTI_TEST_PATHS = []
@@ -475,9 +477,12 @@ if __name__ == "__main__":
 
 
     ## Generate or Load the offline dataset
-    replay_buffer, batch_reward_log = init_replay_buffer(config, how = RUN_SETTINGS["Dataset"], env = data_gen_env)
+    replay_buffer, batch_reward_logs = init_replay_buffer(config, how = RUN_SETTINGS["Dataset"], env = data_gen_env)
+
     train_env = wrap_env(deepcopy(base_env), replay_buffer.get_state_mean(), replay_buffer.get_state_std())
-    log_rewards(batch_reward_log, "BPM")
+    if len(RUN_SETTINGS["Dataset"]) > 1:
+        for i in range(len(RUN_SETTINGS["Dataset"])):
+            log_rewards(batch_reward_logs[RUN_SETTINGS["Dataset"][i]], RUN_SETTINGS["Dataset"][i])
 
 
     ## Create agent
@@ -487,7 +492,7 @@ if __name__ == "__main__":
         "hidden_dim": config.neural_net.hidden_dim,
     }
 
-    agent = gen_awac(actor_critic_kwargs, config)
+    agent = gen_awac(actor_critic_kwargs, config.offline_train)
     #wandb.watch(agent._actor, log="all", log_freq=100)
 
     ## Offline Training
@@ -498,9 +503,12 @@ if __name__ == "__main__":
     elif "load" in RUN_SETTINGS["Train"]:
         agent = load_awac_checkpoint(train_env, config, checkpoint_path= RUN_SETTINGS["Load"])
     if "online" in RUN_SETTINGS["Train"]:
+        online_agent = gen_awac(actor_critic_kwargs, config.online_train)
+        online_agent.load_state_dict(agent.state_dict())
         online_env = wrap_env(MultiClassMultiHop(config=config), state_mean=None, state_std=None) #make_MCMH_env(config = config, record_stats = config.online_train.reset_env)()
-        agent, online_best, replay_buffer = online_train(config, env = online_env, replay_buffer=replay_buffer, agent = agent)
-        online_agent = deepcopy(agent)
+        online_agent, online_best, replay_buffer = online_train(config, env = online_env, replay_buffer=replay_buffer, agent = online_agent)
+        online_agent = deepcopy(online_agent)
+
 
     test_env = wrap_env(deepcopy(base_env), None, None)
     if RUN_SETTINGS["Test"] == "load":
