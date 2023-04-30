@@ -7,23 +7,23 @@ import os
 
 @dataclass
 class WandbConfig:
-    project: str = "4.25_Meeting"
-    group: str = "Post_Meeting"
-    name: str = "AWAC-large_BPM_dataset"
+    project: str = "Large Dataset Testing"
+    group: str = ""
+    name: str = "AWAC"
     checkpoints_path: Optional[str] = "../Saved_Models/AWAC/"
 
 @dataclass
 class EnvConfig:
-    env_json_path: str = "../JSON/Environment/Env1b.json"
+    env_json_path: str = "../JSON/Environment/CrissCross4.json"
 
     def __post_init__(self):
         self.name = os.path.splitext(os.path.basename(self.env_json_path))[0]
 
 @dataclass
 class OfflineDataConfig:
-    load_path: str = "offline_data/Env1b_AWAC-lambda0.3-04-26_0735.data" # "offline_data\\CrissCross4v2_AWAC-04-18_1546.data"
+    load_path: str = "offline_data/Env1b_100x1000.data"  # "offline_data\\CrissCross4v2_AWAC-04-18_1546.data"
     save_path: str = "offline_data"
-    rollout_length: int = 10000
+    rollout_length: int = 1000
     num_rollouts: int = 100
     bp_seed: int = 102921
     num_transitions: int = 0
@@ -48,8 +48,9 @@ class TestConfig:
 
 @dataclass
 class OfflineTrainConfig:
-    num_epochs: int =  100
+    num_epochs: int =  1000
     eval_freq: int = 5 # how often to evaluate the policy during training in terms of epochs
+    save_freq: int = 100 # how often to save the model in terms of epochs
     reward_log_freq: int = 10 # how often to log the reward in terms of epochs
     batch_size: int = 1000
     learning_rate: float = 3e-4
@@ -64,7 +65,7 @@ class OfflineTrainConfig:
 
 @dataclass
 class OnlineTrainConfig:
-    num_epochs = 100
+    num_epochs = 1000
     reset_env = False
     record_rollout: bool = True
     save_freq: int = 10
@@ -74,7 +75,7 @@ class OnlineTrainConfig:
     batch_size = 1000
     learning_rate: float = 3e-4
     gamma: float = 0.99
-    tau: float = 5e-3
+    tau: float = 5e-2
     awac_lambda: float = 1.0
     num_samples: int= 0
     num_transitions: int = 0
@@ -103,6 +104,7 @@ class Config:
     buffer_size: int = 2_000_000 # Replay Buffer
     checkpoints_path: str = "Saved_Models"
     normalize_states = True
+    save_final_buffer = True
 
     run: RunSettings = field(default_factory=RunSettings)
     wandb: WandbConfig = field(default_factory=WandbConfig)
