@@ -142,9 +142,6 @@ class Config:
         # print(f".online_train: \n{pyrallis.dump(self.online_train)}")
         # print(f".test: \n{pyrallis.dump(self.test)}")
         print("-" * 80)
-
-
-
         print("-" * 80)
 
         # print the contents of each subclass
