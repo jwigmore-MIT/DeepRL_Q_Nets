@@ -12,87 +12,26 @@ import uuid
 from tqdm import tqdm
 from copy import deepcopy
 import os
+import roller
 
 from param_extractors import parse_env_json
 from buffers import Buffer
 from Environments.MultiClassMultiHop import MultiClassMultiHop
 from NonDRLPolicies.Backpressure import MCMHBackPressurePolicy
 from wrappers import wrap_env
+from wandb_funcs import wandb_init
 
-def gen_rollout(env, agent, length, device = "cpu", frac = "", show_progress = True):
+def log_fit_metrics(fit_metrics):
+    length = fit_metrics["critic_loss"].shape[0]
+    for i in range(length):
+        wandb.log({
+            "fit/critic_loss": fit_metrics["critic_loss"][i],
+            "fit/values": fit_metrics["values"][i],
+            "fit/targets": fit_metrics["targets"][i],
+            "fit/deviation:": fit_metrics["deviation"][i],
+            "fit/fit_steps": i
+        })
 
-    # Initialize temporary storage
-    obs = np.zeros([length, env.observation_space.shape[0]])
-    next_obs = np.zeros([length, env.observation_space.shape[0]])
-    rewards = np.zeros([length, 1])
-    terminals = np.zeros([length, 1])
-    interventions = np.zeros([length, 1])
-    timeouts = np.zeros([length, 1])
-    actions = np.zeros([length, env.action_space.shape[0]])
-    flows = np.zeros([length, env.action_space.shape[0]])
-    arrivals = np.zeros([length, env.flat_qspace_size])
-
-    # Get the current state of the environment
-    next_ob = env.get_f_state()
-
-    if show_progress:
-        pbar = tqdm(range(length), desc=f"Generating Rollout {frac}")
-    else:
-        pbar = range(length)
-
-    # Perform Rollout
-    for t in pbar:
-        obs[t] = next_ob
-        actions[t], interventions[t] = agent.act(obs[t], device)
-        next_obs[t], rewards[t], terminals[t], timeouts[t], info = env.step(actions[t])
-        if "final_info" in info:
-            # info won't contain flows nor arrivals
-            pass
-        else:
-            flows[t] = info['flows'][-1]
-            arrivals[t] = info['arrivals'][-1]
-        next_ob = next_obs[t]
-    terminals[t] = 1
-    return {
-        "obs": obs,
-        "actions": actions,
-        "rewards": rewards,
-        "terminals": terminals,
-        "timeouts": timeouts,
-        "next_obs": next_obs,
-        "flows": flows,
-        "arrivals": arrivals,
-        "interventions": interventions
-    }
-
-def get_reward_stats(reward_vec):
-    sum_average_rewards = np.array(
-        [np.cumsum(reward_vec[:,i], axis = 0)/np.arange(1,reward_vec.shape[0]+1)
-         for i in range(reward_vec.shape[1])]).T
-
-    time_averaged_rewards = sum_average_rewards.mean(axis = 1)
-    time_averaged_errors = sum_average_rewards.std(axis=1)
-    return time_averaged_rewards, time_averaged_errors
-def log_rollouts(rollout, log_df = None,  policy_name = "policy", glob = "test", hidden = False):
-    if log_df is None:
-        log_df = pd.DataFrame(rollout["rewards"], columns= ["rewards"])
-        wandb.define_metric(f"{glob}/step")
-        wandb.define_metric(f"{glob}/LTA - {policy_name}", summary = "mean", step_metric = f"{glob}/step", hidden = hidden)
-        start_step = 0
-    else:
-        new_df = pd.DataFrame(rollout["rewards"], columns=["rewards"])
-        # extend log_df with new_df
-        log_df = pd.concat([log_df, new_df], axis = 0).reset_index(drop = True)
-        start_step = log_df.shape[0] - new_df.shape[0]
-    log_df["LTA_Rewards"], log_df["LTA_Error"] = get_reward_stats(np.array(log_df["rewards"]).reshape(-1,1))
-    for i in range(start_step, log_df.shape[0]):
-        log_dict = {
-            f"{glob}/step": i,
-            f"{glob}/LTA - {policy_name}": log_df["LTA_Rewards"].loc[i],
-        }
-        wandb.log(log_dict)
-    eps_LTA_reward = log_df["LTA_Rewards"].iloc[-1]
-    return log_df, eps_LTA_reward
 def run_iaopg(config, agent, env, buffer):
 
     horizon = config.iaopg.horizon
@@ -103,19 +42,27 @@ def run_iaopg(config, agent, env, buffer):
     log_def = None
     pbar = tqdm(range(num_rollouts),ncols=80, desc="Training")
     t = 0
+    wandb.watch(agent.actor, log_freq = 1)
+    wandb.watch(agent.critic, log_freq = 1)
 
     for eps in pbar:
-        rollout = gen_rollout(env, agent,rollout_length , frac = f"{eps + 1}/{num_rollouts}")
+        rollout = roller.gen_rollout(env, agent,rollout_length , frac = f"{eps + 1}/{num_rollouts}", show_progress=False)
         buffer.add_transitions(data = rollout)
         # log rollout
-        log_df, eps_LTA_reward = log_rollouts(rollout, log_df = log_def, policy_name = "IAOPG", glob = "train")
+        log_df, eps_LTA_reward = roller.log_rollouts(rollout, log_df = log_def, policy_name = "IAOPG", glob = "online")
         # update agent
-        update_result = agent.update(buffer.get_last_rollout())
+        if eps < 1:
+            batch = buffer.get_last_rollout()
+            fit_metrics = agent.fit_critic(batch, fit_epochs=config.iaopg.fit_epochs)
+            log_fit_metrics(fit_metrics)
+            #pbar.update("Fitting Critic to first rollout")
+
+        batch = buffer.get_last_rollout()
+        update_result = agent.update(batch)
         update_result.update({"eps": eps})
         update_result.update({"eval_LTA_reward": eps_LTA_reward})
 
-        if best_checkpoint is not None or eps_LTA_reward > best_checkpoint["LTA_reward"]:
-            agent.load_checkpoint(best_checkpoint)
+        if best_checkpoint is None or eps_LTA_reward > best_checkpoint["LTA_reward"]:
             best_checkpoint = {
                 "eps": eps,
                 "LTA_reward": eps_LTA_reward,
@@ -136,17 +83,16 @@ def run_iaopg(config, agent, env, buffer):
         wandb.log(update_result)
 
     return agent, best_checkpoint, buffer
-def wandb_init(config) -> None:
-    """Initialize wandb."""
-    run = wandb.init(
-        config=vars(config),
-        project=config.wandb.project,
-        group=config.wandb.group,
-        name=config.wandb.name,
-        id=str(uuid.uuid4()),
-    )
+
+
+
+# test for value function estimation
+
+
 
 RUN_SETTINGS = {}
+
+
 
 if __name__ == "__main__":
 
@@ -161,7 +107,7 @@ if __name__ == "__main__":
     # initialize environment
     parse_env_json(config.env.env_json_path, config)
     base_env = MultiClassMultiHop(config = config)
-    env = wrap_env(base_env, state_mean=None, state_std=None)
+    env = wrap_env(base_env, self_normalize_obs = config.env.self_normalize_obs, reward_min = -40)
 
     # initialize replay buffer
     buffer = Buffer(config.env.flat_state_dim, config.env.flat_action_dim, config.buffer_size, config.device)
@@ -185,6 +131,8 @@ if __name__ == "__main__":
 
     # Initialize wandb
     wandb_init(config)
+
+
 
     # run IAOPG
     run_iaopg(config, agent, env, buffer)

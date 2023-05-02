@@ -16,6 +16,7 @@ class EnvConfig:
     env_json_path: str = "../JSON/Environment/Env1b.json"
     flat_state_dim: int = None
     flat_action_dim: int = None
+    self_normalize_obs: bool = False
     def __post_init__(self):
         self.name = os.path.splitext(os.path.basename(self.env_json_path))[0]
 
@@ -28,6 +29,7 @@ class IAOPGConfig:
     rollout_length: int = 100
     horizon:int = 10000
     trigger_state: int = 30
+    fit_epochs: int = 1000 # How many epochs of initial critic network fitting
 
 
     def __post_init__(self):

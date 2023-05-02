@@ -306,7 +306,7 @@ def train_ppo_agent(env_para, train_args, test_args, run, checkpoint_saver, arti
 
                         delta = rewards[t] + train_args.gamma * nextvalues * nextnonterminal - values[t]
                         advantages[t] = lastgaelam = delta + train_args.gamma * train_args.gae_lambda * nextnonterminal * lastgaelam
-                    returns = advantages + values
+                    returns = advantages + values # compute returns from
 
                 ## Prep data into flat batches
                 b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
