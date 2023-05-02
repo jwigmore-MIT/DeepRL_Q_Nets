@@ -47,6 +47,22 @@ def wrap_env(in_env, **kwargs): #state_mean = None, state_std = None, self_norma
 
     return env
 
+def flatten_env(in_env):
+    env = deepcopy(in_env)
+    env = FlatActionWrapper(env)
+    env = gym.wrappers.FlattenObservation(env)
+    env = gym.wrappers.ClipAction(env)
+    return env
+
+def standard_reward_wrapper(env, min_reward, eps = 1e-8):
+    def mod_reward(reward):
+        return (reward - min_reward/2) / (-min_reward/2 + eps)
+    return gym.wrappers.TransformReward(env, mod_reward)
+
+def normalize_obs_wrapper(env, state_mean, state_std, eps = 1e-8):
+    def normalize_state(state):
+        return (state - state_mean) / (state_std + eps)
+    return gym.wrappers.TransformObservation(env, normalize_state)
 def reward_wrapper(env, min_reward, eps = 1e-8, constant = 1):
     # Constant included to allow for normalizing by a constant such as episode length
     def mod_reward(reward):
@@ -75,3 +91,4 @@ def modify_reward(dataset, env_name, max_episode_steps=1000):
         dataset["rewards"] *= max_episode_steps
     elif "antmaze" in env_name:
         dataset["rewards"] -= 1.0
+

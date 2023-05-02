@@ -11,7 +11,7 @@ from torch import nn
 class MCMHBackPressurePolicy(nn.Module):
 
     # initialization
-    def __init__(self, env, M = False, map_to_discrete = False, tianshou = False):
+    def __init__(self, env, M = False, map_to_discrete = False, tianshou = False, rescale = None):
         super(MCMHBackPressurePolicy, self).__init__()
         self.env = deepcopy(env)
         self.links = env.get_links()
@@ -25,12 +25,19 @@ class MCMHBackPressurePolicy(nn.Module):
         # initialize the solver
         self.solver = pulp.PULP_CBC_CMD(msg=False)
         self.tianshou = tianshou
+        if rescale is not None:
+            self.rescale = rescale
+        else:
+            self.rescale = None
+
 
     def forward(self, state : dict, old_state = None):
         return self._forward(state, old_state)
 
     def act(self, state: dict, old_state=None):
-        return self._forward(state, old_state)
+        action  = self._forward(state, old_state)
+        return action
+
 
     def _forward(self, state : dict, old_state = None):
         #state = keys_to_ints(batch_state)

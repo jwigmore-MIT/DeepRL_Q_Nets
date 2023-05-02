@@ -1,0 +1,28 @@
+{
+  "problem_instance": {
+    "name": "OneHop",
+    "notes": "E[sum_{i,k} A_{i,k}] = 2*1+4*0.5 = 4",
+    "nodes": "[1, 2]",
+    "links": "[[1,2]]",
+    "classes": {
+      "1": {
+        "source": 1,
+        "destination": 2,
+        "arrival": 2,
+        "probability": 1
+      },
+      "2": {
+        "source": 1,
+        "destination": 2,
+        "arrival": 2,
+        "probability": 1
+      }
+    },
+    "capacities": {
+      "(1,2)": {
+        "capacity": 5,
+        "probability": 1
+      }
+    }
+  }
+}
