@@ -18,7 +18,7 @@ from safety.buffers import Buffer
 from Environments.MultiClassMultiHop import MultiClassMultiHop
 from NonDRLPolicies.Backpressure import MCMHBackPressurePolicy
 from safety.wrappers import flatten_env, standard_reward_wrapper, normalize_obs_wrapper
-from safety.agent import Actor, Critic, SafeAgent, Interventioner
+from safety.agent import Actor, Critic, SafeAgent, Interventioner, BetaActor
 import wandb
 
 from tqdm import tqdm
@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 @dataclass
 class AgentConfig:
-    learning_rate: float = 3e-4
+    learning_rate: float = 3e-5
     gamma: float = 0.99
     lambda_: float = 0.95
     actor_hidden_dim: int = 64
@@ -34,7 +34,7 @@ class AgentConfig:
 
 @dataclass
 class EnvConfig:
-    env_json_path: str = "../JSON/Environment/Env2a.json"
+    env_json_path: str = "../JSON/Environment/Env1b.json"
     flat_state_dim: int = None
     flat_action_dim: int = None
     self_normalize_obs: bool = False
@@ -49,12 +49,12 @@ class RunSettings:
 class IAOPGConfig:
     rollout_length: int = 100
 
-    horizon:int = 100000
+    horizon:int = 10000
     trigger_state: int = None
     updates_per_rollout: int = 10 #10
 
     # Pretraining
-    num_pretrain_rollouts = 10 # Number of rollouts to collect
+    num_pretrain_rollouts = 1 # Number of rollouts to collect
     pretrain_fit_epochs = 100 # Number of epochs to fit the critic to the pretrain data
     threshold_ratio = 1 # what percentage of the max cumulative state encountered should be the safety threshold
 
@@ -75,8 +75,8 @@ class IAOPGConfig:
 @dataclass
 class WandBConfig:
     project: str = "InterventionAssistedOnlinePolicyGradient"
-    group: str = "PPO"
-    name: str = "Env2a-PPO"
+    group: str = "PPOBeta"
+    name: str = "Env1b-PPOBeta"
     checkpoints_path: Optional[str] = None
 @dataclass
 class LoggerConfig:
@@ -171,12 +171,13 @@ if __name__ == "__main__":
     buffer = Buffer(config.env.flat_state_dim, config.env.flat_action_dim, config.buffer_size, config.device)
 
     # initialize actor, critic, optimizers, and agent
-    actor = Actor(config.env.flat_state_dim, config.env.flat_action_dim, config.agent.actor_hidden_dim,
-                  init_std=config.iaopg.init_std,
-                  min_actions= env.action_space.low,
-                  max_actions= env.action_space.high,
-                  bias = bias,
-                  mask_ranges = mask_ranges)
+    # actor = Actor(config.env.flat_state_dim, config.env.flat_action_dim, config.agent.actor_hidden_dim,
+    #               init_std=config.iaopg.init_std,
+    #               min_actions= env.action_space.low,
+    #               max_actions= env.action_space.high,
+    #               bias = bias,
+    #               mask_ranges = mask_ranges)
+    actor = BetaActor(config.env.flat_state_dim, config.env.flat_action_dim, config.agent.actor_hidden_dim, mask_ranges)
     actor.to(config.device)
     critic = Critic(config.env.flat_state_dim, config.agent.critic_hidden_dim)
     critic.to(config.device)

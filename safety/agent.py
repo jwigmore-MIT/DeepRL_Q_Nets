@@ -5,7 +5,135 @@ import numpy as np
 from copy import deepcopy
 TensorBatch = List[torch.Tensor]
 
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
+class MultiDiscreteActor(nn.Module):
 
+    def __init__(self, state_dim, hidden_dim, nvec: np.ndarray):
+        super().__init__()
+
+        self.network = nn.Sequential(
+            layer_init(nn.Linear(state_dim, hidden_dim)),
+            nn.ReLU(),
+            layer_init(nn.Linear(hidden_dim, hidden_dim)),
+            nn.ReLU(),
+            layer_init(nn.Linear(hidden_dim, hidden_dim)),
+            nn.ReLU()
+        )
+        self.nvec = nvec
+        self.actor_head = layer_init(nn.Linear(hidden_dim, np.sum(self.nvec)), std=0.01)
+        self.train = True
+
+    def _get_policy(self, state: torch.Tensor) -> torch.distributions.Distribution:
+        "This method returns a list of distributions, one for each action dimension"
+        hidden = self.network(state)
+        logits = self.actor_head(hidden)
+        split_logits = torch.split(logits, self.nvec.tolist(), dim=1) # :
+        multi_cat = [torch.distributions.Categorical(logits=logits) for logits in split_logits]
+        return multi_cat
+
+    def log_prob(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+        multi_cat = self._get_policy(state)
+        action_mT = torch.transpose(action, 0, 1)
+        logprob = torch.stack([categorical.log_prob(a.T) for a, categorical in zip(action_mT, multi_cat)])
+        return logprob.sum(0)
+
+    def forward(self, state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        multi_cat = self._get_policy(state)
+        action = self.sample_from_multicat(multi_cat)
+        log_prob = torch.stack([categorical.log_prob(a) for a, categorical in zip(action, multi_cat)])
+        return action.T, log_prob.sum(0)
+
+    def act(self, state: np.ndarray, device = "cpu") -> torch.Tensor:
+        state_t = torch.tensor(state[None], dtype=torch.float32, device=device)
+        multi_cat = self._get_policy(state_t)
+        if self.train:
+            action = self.sample_from_multicat(multi_cat)
+        else:
+            action = torch.stack([categorical.probs.argmax() for categorical in multi_cat])
+        return action.T.cpu().data.numpy().flatten()
+
+    def sample_from_multicat(self, multi_cat: List[torch.distributions.Categorical]) -> torch.Tensor:
+        samples = []
+        for categorical in multi_cat:
+            # check if categorical.probs is empty
+            if categorical.probs.nelement() == 0:
+                samples.append(torch.tensor([0]))
+            else:
+                samples.append(categorical.sample())
+        return torch.stack(samples)
+
+
+
+
+
+
+class BetaActor(nn.Module):
+
+    def __init__(self, state_dim: int,
+        action_dim: int,
+        hidden_dim: int,
+        action_boundaries: [np.ndarray] = None,
+        ):
+        super().__init__()
+        assert action_boundaries is not None
+        self.action_space_low = torch.Tensor(action_boundaries[0,:])
+        self.action_space_high = torch.Tensor(action_boundaries[1,:])
+
+        self.affine = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Tanh(),
+        )
+        self.alpha_pre_softplus = nn.Linear(hidden_dim, action_dim)
+        self.beta_pre_softplus = nn.Linear(hidden_dim, action_dim)
+        self.softplus = nn.Softplus()
+
+    def get_policy(self, state: torch.Tensor) -> torch.distributions.Distribution:
+        x = self.affine(state)
+        alpha = torch.add(self.softplus(self.alpha_pre_softplus(x)), 1.)
+        beta = torch.add(self.softplus(self.beta_pre_softplus(x)), 1.)
+        return torch.distributions.Beta(alpha, beta)
+    def forward(self, state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        policy = self.get_policy(state)
+        beta_action = policy.rsample()
+        log_prob = policy.log_prob(beta_action).sum(-1, keepdim=True)
+        action = self.scale_action(beta_action)
+
+        return action, log_prob
+
+    def act(self, state: torch.Tensor, device = "cpu") -> torch.Tensor:
+        state_t = torch.tensor(state[None], dtype=torch.float32, device=device)
+        policy = self.get_policy(state_t)
+        if self.affine.training:
+            beta_action = policy.rsample()
+        else:
+            beta_action = policy.mean
+        action = self.scale_action(beta_action)
+        return action.cpu().data.numpy().flatten()
+    def log_prob(self, state: torch.Tensor, action: torch.Tensor, extra= False) -> torch.Tensor:
+        #in this case the action will be scaled to the range of the action space
+        policy = self.get_policy(state)
+        beta_action = self.inv_scale_action(action) #unscale the action
+        log_prob = policy.log_prob(beta_action).nan_to_num(neginf=1e-8 ).sum(-1, keepdim=True)
+        if not extra:
+            return log_prob
+        else:
+            policy_means = policy.mean
+            policy_stds = policy.stddev[-1]
+            return log_prob, policy_means, policy_stds
+
+    def scale_action(self, beta_action: torch.Tensor) -> torch.Tensor:
+
+        return beta_action * (self.action_space_high - self.action_space_low) + self.action_space_low
+
+    def inv_scale_action(self, action: torch.Tensor) -> torch.Tensor:
+        return ((action - self.action_space_low) / (self.action_space_high - self.action_space_low)).nan_to_num(0)
 class Actor(nn.Module):
     def __init__(
         self,
@@ -234,8 +362,8 @@ class SafeAgent:
             results["actor_loss"].append(actor_results["actor_loss"])
             results["log_probs"].append(actor_results["log_probs"].mean().item())
             results["advantages"].append(actor_results["advantages"].mean().item())
-            results["avg_policy_means"].append(actor_results["policy_means"].mean().item())
-            results["policy_stds"].append(actor_results["policy_stds"].mean().item())
+            # results["avg_policy_means"].append(actor_results["policy_means"].mean().item())
+            # results["policy_stds"].append(actor_results["policy_stds"].mean().item())
 
         return results
 
@@ -328,7 +456,7 @@ class SafeAgent:
             next_value = self.critic(batch["next_obs"][-1], unnormalize= True)
             rewards = torch.Tensor(batch["rewards"])
             advantages = self.compute_GAE(rewards, values, next_value, batch["dones"])
-        new_log_probs, means, std = self.actor.log_prob(batch["obs"], batch["actions"], extra = True)
+        new_log_probs= self.actor.log_prob(batch["obs"], batch["actions"])
         log_ratio = (new_log_probs - curr_log_probs)
         ratio = log_ratio.exp()
         with torch.no_grad():
@@ -345,8 +473,7 @@ class SafeAgent:
         return {"actor_loss": actor_loss.item(),
                 "log_probs": new_log_probs,
                 "advantages": advantages,
-                "policy_means": means,
-                "policy_stds": std}
+                }
 
 
 

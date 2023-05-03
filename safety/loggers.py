@@ -91,11 +91,15 @@ def log_pretrain_metrics(metrics):
 
 def log_update_metrics(metrics, eps = None):
     for key in metrics.keys():
+        if len(metrics[key]) == 0:
+            continue
         wandb.define_metric(f"update/{key}-mean", summary = "mean")
         wandb.define_metric(f"update/{key}-max", summary = "max")
         wandb.define_metric(f"update/{key}-min", summary = "min")
     log_dict = {}
     for key in metrics.keys():
+        if len(metrics[key]) == 0:
+            continue
         log_dict[f"update/{key}-mean"] = np.mean(metrics[key])
         log_dict[f"update/{key}-max"] = np.max(metrics[key])
         log_dict[f"update/{key}-min"] = np.min(metrics[key])
