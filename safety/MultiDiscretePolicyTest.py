@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 @dataclass
 class AgentConfig:
-    learning_rate: float = 3e-5
+    learning_rate: float = 1e-5
     gamma: float = 0.99
     lambda_: float = 0.95
     actor_hidden_dim: int = 64
@@ -34,7 +34,7 @@ class AgentConfig:
 
 @dataclass
 class EnvConfig:
-    env_json_path: str = "../JSON/Environment/Env1b.json"
+    env_json_path: str = "../JSON/Environment/Env2a.json"
     flat_state_dim: int = None
     flat_action_dim: int = None
     self_normalize_obs: bool = False
@@ -49,14 +49,14 @@ class RunSettings:
 class IAOPGConfig:
     rollout_length: int = 100
 
-    horizon:int = 10000
+    horizon:int = 100000
     trigger_state: int = None
     updates_per_rollout: int = 10 #10
 
     # Pretraining
     num_pretrain_rollouts = 1 # Number of rollouts to collect
-    pretrain_fit_epochs = 100 # Number of epochs to fit the critic to the pretrain data
-    threshold_ratio = 1 # what percentage of the max cumulative state encountered should be the safety threshold
+    pretrain_fit_epochs = 100# Number of epochs to fit the critic to the pretrain data
+    threshold_ratio = 1.0 # what percentage of the max cumulative state encountered should be the safety threshold
 
     # Modifications
     standardize_reward: bool = False
@@ -65,6 +65,8 @@ class IAOPGConfig:
 
     ppo: bool = True
     ppo_clip_coef: float = 0.2
+    kl_coef: float = 1.0
+    kl_target: float = 1.0
 
     init_std: float = 1.5
 
@@ -76,11 +78,12 @@ class IAOPGConfig:
 class WandBConfig:
     project: str = "InterventionAssistedOnlinePolicyGradient"
     group: str = "MultiDiscrete"
-    name: str = "Env1b-MultiDiscrete"
+    name: str = "Env2a-MultiDiscrete-EarlyStop"
     checkpoints_path: Optional[str] = None
 @dataclass
 class LoggerConfig:
     include: List[str] =  field(default_factory=lambda: ["all"])
+    type: str = "final" # "final", "all"
 @dataclass
 class Config:
     device: str = "cpu"
@@ -153,7 +156,7 @@ def create_bias_and_mask(flat_env):
 if __name__ == "__main__":
     from NonDRLPolicies.Backpressure import MCMHBackPressurePolicy
     from safety.roller import gen_rollout, log_rollouts
-    from safety.wandb_funcs import wandb_init
+    from safety.wandb_funcs import wandb_init, log_history
     from safety.loggers import log_rollouts, log_pretrain_metrics, log_update_metrics, log_rollout_summary
 
     config = Config()
@@ -189,7 +192,9 @@ if __name__ == "__main__":
                       lambda_ = config.agent.lambda_,
                       updates_per_rollout=config.iaopg.updates_per_rollout,
                       ppo_clip_coef=config.iaopg.ppo_clip_coef,
-                      ppo = config.iaopg.ppo)
+                      ppo = config.iaopg.ppo,
+                      kl_coef=config.iaopg.kl_coef,
+                      kl_target=config.iaopg.kl_target,)
 
     # init wandb
     wandb_init(config)
@@ -232,13 +237,14 @@ if __name__ == "__main__":
             log_rollout_summary(rollout,eps, glob = "rollout_summary")
             batch = buffer.get_last_rollout()
             update_metrics = agent.update(batch)
-            log_update_metrics(update_metrics, eps)
+            log_update_metrics(update_metrics, eps, type = config.logger.type)
 
     # Test final agent
     env.reset()
     rollout = gen_rollout(env, agent, length = 1000)
     test_history, test_lta_reward = log_rollouts(rollout, history = None, policy_name="Final Agent", glob = "test")
     log_rollout_summary(rollout, 0, glob = "test")
+    log_history(history)
 
     wandb.finish()
 

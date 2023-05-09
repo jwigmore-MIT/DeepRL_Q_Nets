@@ -34,11 +34,23 @@ class MultiDiscreteActor(nn.Module):
         multi_cat = [torch.distributions.Categorical(logits=logits) for logits in split_logits]
         return multi_cat
 
-    def log_prob(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+    def log_prob(self, state: torch.Tensor, action: torch.Tensor, extra = False) -> torch.Tensor:
         multi_cat = self._get_policy(state)
         action_mT = torch.transpose(action, 0, 1)
-        logprob = torch.stack([categorical.log_prob(a.T) for a, categorical in zip(action_mT, multi_cat)])
-        return logprob.sum(0)
+        log_probs = []
+        entropy = []
+        for a, categorical in zip(action_mT, multi_cat):
+            log_probs.append(categorical.log_prob(a))
+            entropy.append(categorical.entropy())
+
+        logprob = torch.stack(log_probs)
+        entropy = torch.stack(entropy)
+        #logprob = torch.stack([categorical.log_prob(a.T) for a, categorical in zip(action_mT, multi_cat)])
+        if extra:
+            return {"log_probs":logprob.sum(0),
+                    "entropy": entropy.mean(0)}# "probs": probs, }
+        else:
+            return logprob.sum(0)
 
     def forward(self, state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         multi_cat = self._get_policy(state)
@@ -281,6 +293,8 @@ class SafeAgent:
             lambda_: float = 0.95,
             ppo: bool = False,
             ppo_clip_coef: float = 0.25,
+            kl_coef: float = 0.0, # Beta in PPO paper
+            kl_target: float = None,
             value_clip: float = 1.0,
             updates_per_rollout: int = 1,
             pretrain: bool = False,
@@ -304,6 +318,8 @@ class SafeAgent:
         self.ppo = ppo
         self.ppo_clip_coef = ppo_clip_coef
         self.value_clip = value_clip
+        self.kl_coef = kl_coef
+        self.kl_target = kl_target
 
         self.pretrain = pretrain
 
@@ -331,17 +347,21 @@ class SafeAgent:
         return action, intervention
 
     def update(self, batch):
-        results = {"critic_loss":[],
-                   "values_mean":[],
-                   "values_std":[],
-                   "targets_mean":[],
-                    "targets_std":[],
-                   "actor_loss":[],
-                   "vt_error":[],
-                   "log_probs":[],
-                   "advantages":[],
-                   "avg_policy_means": [],
-                   "policy_stds": []}
+
+        results = {}
+
+        # results = {"critic_loss":[],
+        #            "values_mean":[],
+        #            "values_std":[],
+        #            "targets_mean":[],
+        #             "targets_std":[],
+        #            "actor_loss":[],
+        #            "vt_error":[],
+        #            "log_probs":[],
+        #            "advantages":[],
+        #            "avg_policy_means": [],
+        #            "policy_stds": []}
+
         if self.ppo:
             with torch.no_grad():
                 curr_log_probs = self.actor.log_prob(batch["obs"], batch["actions"])
@@ -350,20 +370,28 @@ class SafeAgent:
         for i in range(self.updates_per_rollout):
 
             critic_results = self.update_critic(batch)
-            actor_results = self.update_actor(batch, curr_log_probs )
+            actor_results = self.update_actor(batch, curr_log_probs)
 
 
-            results["critic_loss"].append(critic_results["critic_loss"])
-            results["values_mean"].append(critic_results["values"].mean().item())
-            results["values_std"].append(critic_results["values"].std().item())
-            results["targets_mean"].append(critic_results["targets"].mean().item())
-            results["targets_std"].append(critic_results["targets"].std().item())
-            results["vt_error"].append((critic_results["values"] - critic_results["targets"]).mean().item())
-            results["actor_loss"].append(actor_results["actor_loss"])
-            results["log_probs"].append(actor_results["log_probs"].mean().item())
-            results["advantages"].append(actor_results["advantages"].mean().item())
-            # results["avg_policy_means"].append(actor_results["policy_means"].mean().item())
-            # results["policy_stds"].append(actor_results["policy_stds"].mean().item())
+            for key in critic_results.keys():
+                if key not in results.keys():
+                    results[key] = []
+                else:
+                    results[key].append(critic_results[key])
+            for key in actor_results.keys():
+                if key not in results.keys():
+                    results[key] = []
+                else:
+                    results[key].append(actor_results[key])
+            if "update_epochs" not in results.keys():
+                results["update_epochs"] = [i+1]
+            else:
+                results["update_epochs"].append(i+1)
+
+            if "stop_update" in actor_results.keys():
+                if actor_results["stop_update"]:
+                    break
+
 
         return results
 
@@ -375,9 +403,17 @@ class SafeAgent:
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
+        # Compute "Critic Error" = (values - targets)
+        critic_error = (norm_values - target)
+        max_critic_error = critic_error.max().item()
+        min_critic_error = critic_error.min().item()
+        if abs(max_critic_error) > abs(min_critic_error):
+            max_critic_dev = max_critic_error
+        else:
+            max_critic_dev = min_critic_error
         return {"critic_loss": critic_loss.item(),
-                "values": norm_values,
-                "targets": target}
+                "max_critic_dev: ": max_critic_dev,
+                "avg_critic_error: ": critic_error.abs().mean().item()}
 
     def compute_critic_target(self, batch):
         with torch.no_grad():
@@ -398,24 +434,31 @@ class SafeAgent:
         return loss
 
     def fit_critic(self, batch, fit_epochs=100):
-        metrics = {"critic_loss": [],
-                   "values_mean": [],
-                   "values_std": [],
-                   "targets_mean": [],
-                   "targets_std": [],
-                   "deviation_mean": [],
-                   "deviation_std": [],
-                   }
+        # metrics = {"critic_loss": [],
+        #            "values_mean": [],
+        #            "values_std": [],
+        #            "targets_mean": [],
+        #            "targets_std": [],
+        #            "deviation_mean": [],
+        #            "deviation_std": [],
+        #            }
+        metrics = {}
 
         for i in range(fit_epochs):
             critic_results = self.update_critic(batch)
-            metrics["critic_loss"].append(critic_results["critic_loss"])
-            metrics["values_mean"].append(critic_results["values"].mean().item())
-            metrics["values_std"].append(critic_results["values"].std().item())
-            metrics["targets_mean"].append(critic_results["targets"].mean().item())
-            metrics["targets_std"].append(critic_results["targets"].std().item())
-            metrics["deviation_mean"].append((critic_results["values"] - critic_results["targets"]).abs().mean().item())
-            metrics["deviation_std"].append((critic_results["values"] - critic_results["targets"]).abs().std().item())
+
+            for key in critic_results.keys():
+                if key not in metrics.keys():
+                    metrics[key] = [critic_results[key]]
+                else:
+                    metrics[key].append(critic_results[key])
+            # metrics["critic_loss"].append(critic_results["critic_loss"])
+            # metrics["values_mean"].append(critic_results["values"].mean().item())
+            # metrics["values_std"].append(critic_results["values"].std().item())
+            # metrics["targets_mean"].append(critic_results["targets"].mean().item())
+            # metrics["targets_std"].append(critic_results["targets"].std().item())
+            # metrics["deviation_mean"].append((critic_results["values"] - critic_results["targets"]).abs().mean().item())
+            # metrics["deviation_std"].append((critic_results["values"] - critic_results["targets"]).abs().std().item())
 
         for key, value in metrics.items():
             metrics[key] = np.array(value)
@@ -436,44 +479,70 @@ class SafeAgent:
             rewards = torch.Tensor(batch["rewards"])
             advantages = self.compute_GAE(rewards, values, next_value, batch["dones"])
         # Get log probs
-        log_probs, means, std = self.actor.log_prob(batch["obs"], batch["actions"], extra = True)
+        #log_probs, means, std = self.actor.log_prob(batch["obs"], batch["actions"], extra = True)
+        result = self.actor.log_prob(batch["obs"], batch["actions"], extra = True)
         # Compute actor loss
-        actor_loss = self.actor_loss(advantages, log_probs)
+        actor_loss = self.actor_loss(advantages, result["log_probs"])
+        for key in result.keys():
+            result[key] = result[key].mean().item()
+        result["actor_loss"] = actor_loss.item()
+
+        #result["advantages"] = advantages
         # Update actor
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
-        return {"actor_loss": actor_loss.item(),
-                "log_probs": log_probs,
-                "advantages": advantages,
-                "policy_means": means,
-                "policy_stds": std}
+        return result
         # Updates
 
     def ppo_actor_update(self, batch, curr_log_probs):
+        update = True
         with torch.no_grad():
             values = self.critic(batch["obs"], unnormalize= True)
             next_value = self.critic(batch["next_obs"][-1], unnormalize= True)
             rewards = torch.Tensor(batch["rewards"])
             advantages = self.compute_GAE(rewards, values, next_value, batch["dones"])
-        new_log_probs= self.actor.log_prob(batch["obs"], batch["actions"])
-        log_ratio = (new_log_probs - curr_log_probs)
+        result = self.actor.log_prob(batch["obs"], batch["actions"], extra = True)
+        log_ratio = (result["log_probs"] - curr_log_probs)
         ratio = log_ratio.exp()
+
         with torch.no_grad():
-            approx_kl = -log_ratio.mean()
             clip_frac = ((ratio - 1.0).abs() > self.ppo_clip_coef).float().mean().item()
+        if self.kl_coef == 0:
+            with torch.no_grad: approx_kl = -log_ratio.mean()
+        else:
+            approx_kl = -log_ratio.mean()
+        if self.kl_target is not None:
+            if approx_kl > self.kl_target:
+                # if the KL is too high, we stop updating the policy
+                update = False
+                #result["stop_update"] = True
+
 
         # compute loss
         pg_loss1 = -advantages * ratio # unclipped loss
         pg_loss2 = -advantages * torch.clamp(ratio, 1.0 - self.ppo_clip_coef, 1.0 + self.ppo_clip_coef) # clipped loss
-        actor_loss = torch.max(pg_loss1, pg_loss2).mean()
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        self.actor_optimizer.step()
-        return {"actor_loss": actor_loss.item(),
-                "log_probs": new_log_probs,
-                "advantages": advantages,
-                }
+        kl_loss = self.kl_coef * approx_kl
+        actor_loss = torch.max(pg_loss1, pg_loss2).mean() + kl_loss
+        if update:
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            self.actor_optimizer.step()
+            pg_magnitude = torch.norm(torch.stack([torch.norm(p.grad.detach(), 2.0) for p in list(self.actor.parameters())]), 2.0)
+
+            #result["stop_update"] = False
+
+        else:
+            pg_magnitude = torch.Tensor([0])
+        for key in result.keys():
+            result[key] = result[key].mean().item()
+        result["actor_loss"] = actor_loss.item()
+        result["approx_kl"] = approx_kl.item()
+        result["clip_frac"] = clip_frac
+        result["actor_loss_unclipped"] = pg_loss1.mean().item()
+        result["stop_update"] = not update
+        result["pg_magnitude"] = pg_magnitude.item()
+        return result
 
 
 

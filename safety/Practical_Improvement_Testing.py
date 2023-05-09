@@ -34,7 +34,7 @@ class AgentConfig:
 
 @dataclass
 class EnvConfig:
-    env_json_path: str = "../JSON/Environment/Env2a.json"
+    env_json_path: str = "../JSON/Environment/Env1b.json"
     flat_state_dim: int = None
     flat_action_dim: int = None
     self_normalize_obs: bool = False
@@ -54,7 +54,7 @@ class IAOPGConfig:
     updates_per_rollout: int = 10 #10
 
     # Pretraining
-    num_pretrain_rollouts = 10 # Number of rollouts to collect
+    num_pretrain_rollouts = 1 # Number of rollouts to collect
     pretrain_fit_epochs = 100 # Number of epochs to fit the critic to the pretrain data
     threshold_ratio = 1 # what percentage of the max cumulative state encountered should be the safety threshold
 
@@ -64,9 +64,9 @@ class IAOPGConfig:
     normalize_values: bool = True
 
     ppo: bool = True
-    ppo_clip_coef: float = 0.2
+    ppo_clip_coef: float = 0.25
 
-    init_std: float = 1.5
+    init_std: float = 3
 
 
     def __post_init__(self):
@@ -74,9 +74,9 @@ class IAOPGConfig:
 
 @dataclass
 class WandBConfig:
-    project: str = "InterventionAssistedOnlinePolicyGradient"
+    project: str = "ImprovementTesting"
     group: str = "PPO"
-    name: str = "Env2a-PPO"
+    name: str = "Env1b-PPO"
     checkpoints_path: Optional[str] = None
 @dataclass
 class LoggerConfig:
@@ -214,7 +214,7 @@ if __name__ == "__main__":
                                                     threshold_ratio = config.iaopg.threshold_ratio,
                                                     rollout_length=rollout_length,
                                                     standardize_reward = config.iaopg.standardize_reward)
-            if True:
+            if config.iaopg.trigger_state is None:
                 config.update_trigger_state(pretrain_results["q_threshold"])
                 agent.set_safe_threshold(pretrain_results["q_threshold"])
             # Wrap env based on pretrain if needed

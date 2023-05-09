@@ -89,21 +89,37 @@ def log_pretrain_metrics(metrics):
         log_dict.update({"pretrain/step": i})
         wandb.log(log_dict)
 
-def log_update_metrics(metrics, eps = None):
-    for key in metrics.keys():
-        if len(metrics[key]) == 0:
-            continue
-        wandb.define_metric(f"update/{key}-mean", summary = "mean")
-        wandb.define_metric(f"update/{key}-max", summary = "max")
-        wandb.define_metric(f"update/{key}-min", summary = "min")
-    log_dict = {}
-    for key in metrics.keys():
-        if len(metrics[key]) == 0:
-            continue
-        log_dict[f"update/{key}-mean"] = np.mean(metrics[key])
-        log_dict[f"update/{key}-max"] = np.max(metrics[key])
-        log_dict[f"update/{key}-min"] = np.min(metrics[key])
-    if eps is not None:
-        log_dict.update({"update/eps": eps})
+def log_update_metrics(metrics, eps = None, type = "all"):
+    # type can be "all" or "final", refers to logging metrics from all epochs
+    # or just the final epoch
+    if type == "all":
+        for key in metrics.keys():
+            if len(metrics[key]) == 0:
+                continue
+            wandb.define_metric(f"update/{key}-mean", summary = "mean")
+            wandb.define_metric(f"update/{key}-max", summary = "max")
+            wandb.define_metric(f"update/{key}-min", summary = "min")
+        log_dict = {}
+        for key in metrics.keys():
+            if len(metrics[key]) == 0:
+                continue
+            log_dict[f"update/{key}-mean"] = np.mean(metrics[key])
+            log_dict[f"update/{key}-max"] = np.max(metrics[key])
+            log_dict[f"update/{key}-min"] = np.min(metrics[key])
+        if eps is not None:
+            log_dict.update({"update/eps": eps})
+    if type == "final":
+        for key in metrics.keys():
+            if len(metrics[key]) == 0:
+                continue
+            wandb.define_metric(f"update/{key}")
+        log_dict = {}
+        for key in metrics.keys():
+            if len(metrics[key]) == 0:
+                continue
+            log_dict[f"update/{key}"] = metrics[key][-1]
+        if eps is not None:
+            log_dict.update({"update/eps": eps})
+
     wandb.log(log_dict)
 
