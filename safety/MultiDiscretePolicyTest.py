@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 @dataclass
 class AgentConfig:
-    learning_rate: float = 1e-5
+    learning_rate: float = 3e-4
     gamma: float = 0.99
     lambda_: float = 0.95
     actor_hidden_dim: int = 64
