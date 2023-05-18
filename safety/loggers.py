@@ -89,6 +89,17 @@ def log_pretrain_metrics(metrics):
         log_dict.update({"pretrain/step": i})
         wandb.log(log_dict)
 
+def log_offline_metrics(metrics):
+    for key in metrics.keys():
+        wandb.define_metric(f"offline/{key}")
+    wandb.define_metric(f"offline/step")
+    for i in range(metrics["critic_loss"].shape[0]):
+        log_dict = {}
+        for key in metrics.keys():
+            log_dict[f"offline/{key}"] = metrics[key][i]
+        log_dict.update({"offline/step": i})
+        wandb.log(log_dict)
+
 def log_update_metrics(metrics, eps = None, type = "all"):
     # type can be "all" or "final", refers to logging metrics from all epochs
     # or just the final epoch

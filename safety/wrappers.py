@@ -63,6 +63,9 @@ def normalize_obs_wrapper(env, state_mean, state_std, eps = 1e-8):
     def normalize_state(state):
         return (state - state_mean) / (state_std + eps)
     return gym.wrappers.TransformObservation(env, normalize_state)
+
+def normalize_obs_gym_wrapper(env):
+    return gym.wrappers.NormalizeObservation(env)
 def reward_wrapper(env, min_reward, eps = 1e-8, constant = 1):
     # Constant included to allow for normalizing by a constant such as episode length
     def mod_reward(reward):

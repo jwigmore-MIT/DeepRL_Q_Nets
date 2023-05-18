@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 @dataclass
 class AgentConfig:
-    learning_rate: float = 8e-3
+    learning_rate: float = 3e-4
     gamma: float = 0.99
     lambda_: float = 0.95
     actor_hidden_dim: int = 64
@@ -44,14 +44,24 @@ class EnvConfig:
 @dataclass
 class RunSettings:
     save_freq: int = 1
-
+@dataclass
+class OfflineConfig:
+    # Offline
+    awac_lambda = 1.0
+    exp_adv_max = 100
+    offline_rollout_length = 1000  # 10000
+    num_offline_rollouts = 1
+    offline_updates = 10
+    offline_batch_size = 100
+    Offline_data_path: str = "offline_data/AbilineData1"
+    # "offline_data\\CrissCross4v2_AWAC-04-18_1546.data"
 @dataclass
 class IAOPGConfig:
     rollout_length: int = 1000
 
     horizon:int = 300000
     trigger_state: int = None
-    updates_per_rollout: int = 100 #10
+    updates_per_rollout: int = 10 #10
 
     # Pretraining
     num_pretrain_rollouts = 1 # Number of rollouts to collect
@@ -68,10 +78,18 @@ class IAOPGConfig:
     ppo_clip_coef: float = 0.2
     kl_coef: float = 1.0
     kl_target: float = 1.0
-    grad_clip: float = None
+    grad_clip: float = 1.0
+
+    # Offline
+    awac_lambda = 1.0
+    exp_adv_max = 100
+    offline_rollout_length = 1000  # 10000
+    num_offline_rollouts = 1
+    offline_updates = 10
+    offline_batch_size = 100
+
 
     intervention_penalty: float = 0
-
 
     init_std: float = 1.5
 
@@ -104,6 +122,7 @@ class Config:
     run_settings: RunSettings = field(default_factory=RunSettings)
     iaopg: IAOPGConfig = field(default_factory=IAOPGConfig)
     logger: LoggerConfig = field(default_factory=LoggerConfig)
+    offline: OfflineConfig = field(default_factory=OfflineConfig)
     def print_all(self):
         print("-" * 80)
         print(f"Config: \n{pyrallis.dump(self)}")
@@ -162,7 +181,7 @@ if __name__ == "__main__":
     from NonDRLPolicies.Backpressure import MCMHBackPressurePolicy
     from safety.roller import gen_rollout, log_rollouts
     from safety.wandb_funcs import wandb_init, log_history
-    from safety.loggers import log_rollouts, log_pretrain_metrics, log_update_metrics, log_rollout_summary
+    from safety.loggers import log_rollouts, log_pretrain_metrics, log_update_metrics, log_rollout_summary, log_offline_metrics
 
     config = Config()
 
@@ -204,22 +223,27 @@ if __name__ == "__main__":
                       kl_target=config.iaopg.kl_target,
                       intervention_penalty=config.iaopg.intervention_penalty,
                       normalized_states = config.iaopg.normalize_obs,
-                      grad_clip=config.iaopg.grad_clip,)
+                      grad_clip=config.iaopg.grad_clip,
+                      awac_lambda=config.iaopg.awac_lambda,
+                      exp_adv_max=config.iaopg.exp_adv_max,)
 
     # init wandb
     wandb_init(config)
 
     num_rollouts = config.iaopg.num_rollouts
     rollout_length = config.iaopg.rollout_length
+    offline_rollout_length = config.iaopg.offline_rollout_length
     history = None
     # Pre-train
     # Start real training
     pbar = tqdm(range(num_rollouts), ncols=80, desc="Environment Rollouts with BP")
     agent.pretrain = False
     for eps in pbar:
-        if eps < config.iaopg.num_pretrain_rollouts:
+        if eps < config.iaopg.num_offline_rollouts:
+            if config.offline_load:
+                rollout = torch.load(config.offline_load_path)
             agent.pretrain = True # so we use the safe actor in pretraining
-            pretrain_rollout = gen_rollout(env, agent, length=rollout_length, show_progress=False)
+            pretrain_rollout = gen_rollout(env, agent, length=offline_rollout_length, show_progress=False)
             rollout, pretrain_results = process_prerollout(pretrain_rollout,
                                                     threshold_ratio = config.iaopg.threshold_ratio,
                                                     rollout_length=rollout_length,
@@ -232,12 +256,13 @@ if __name__ == "__main__":
             #     env = standard_reward_wrapper(env, pretrain_results["min_reward"])
             # if config.iaopg.normalize_obs:
             #     env = normalize_obs_wrapper(env, pretrain_results["mean_obs"], pretrain_results["std_obs"])
-            history, eps_lta_reward = log_rollouts(rollout, history=history, policy_name="Pretrain", glob="pretrain",
+            history, eps_lta_reward = log_rollouts(rollout, history=history, policy_name="Offline", glob="offline",
                                                    include=config.logger.include)
             buffer.add_transitions(rollout)
-            batch = buffer.get_last_rollout()
-            pretrain_metrics = agent.fit_critic(batch, fit_epochs=config.iaopg.pretrain_fit_epochs)
-            log_pretrain_metrics(pretrain_metrics)
+            for i in range(config.iaopg.offline_updates):
+                batch = buffer.sample(config.iaopg.offline_batch_size)
+                update_metrics = agent.offline_update(batch)
+                log_offline_metrics(update_metrics)
             agent.pretrain = False
         else:
             rollout = gen_rollout(env, agent, length=rollout_length, show_progress=False)

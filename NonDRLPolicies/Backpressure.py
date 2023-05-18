@@ -85,7 +85,7 @@ class MCMHBackPressurePolicy(nn.Module):
         #     if hasattr(state.obs, 'ndim') and state.obs.ndim == 3:
         #         state = self.env.unflatten_obs(state.obs[0,0,:])
         if isinstance(state, np.ndarray):
-            state = self.env.unflatten_obs(state)
+            state = self.env.unflatten_obs(state.reshape(-1,1))
 
         Q = keys_to_ints(state['Q'])
         #Cap = keys_to_ints(state['Cap'])

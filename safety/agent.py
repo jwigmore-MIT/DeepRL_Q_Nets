@@ -34,7 +34,7 @@ class MultiDiscreteActor(nn.Module):
         multi_cat = [torch.distributions.Categorical(logits=logits) for logits in split_logits]
         return multi_cat
 
-    def log_prob(self, state: torch.Tensor, action: torch.Tensor, extra = False) -> torch.Tensor:
+    def log_prob(self, state: torch.Tensor, action: torch.Tensor, extra = False, do_sum = True) -> torch.Tensor:
         multi_cat = self._get_policy(state)
         action_mT = torch.transpose(action, 0, 1)
         log_probs = []
@@ -45,12 +45,16 @@ class MultiDiscreteActor(nn.Module):
 
         logprob = torch.stack(log_probs)
         entropy = torch.stack(entropy)
+        if do_sum:
+            log_probs = logprob.sum(0)
+        else:
+            log_probs = logprob
         #logprob = torch.stack([categorical.log_prob(a.T) for a, categorical in zip(action_mT, multi_cat)])
         if extra:
-            return {"log_probs":logprob.sum(0),
+            return {"log_probs":log_probs,
                     "entropy": entropy.mean(0)}# "probs": probs, }
         else:
-            return logprob.sum(0)
+            return log_probs
 
     def forward(self, state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         multi_cat = self._get_policy(state)
@@ -295,9 +299,16 @@ class SafeAgent:
             ppo_clip_coef: float = 0.25,
             kl_coef: float = 0.0, # Beta in PPO paper
             kl_target: float = None,
+            intervention_penalty: float = 0.0,
+            grad_clip: float = None,
             value_clip: float = 1.0,
             updates_per_rollout: int = 1,
+            awac_lambda: float = 1.0,
+            exp_adv_max: float = 100,
+
+
             pretrain: bool = False,
+            normalized_states: Union[bool, str] = False, # False, "gym"
 
     ):
         self.actor = actor
@@ -320,6 +331,15 @@ class SafeAgent:
         self.value_clip = value_clip
         self.kl_coef = kl_coef
         self.kl_target = kl_target
+        self.grad_clip = grad_clip
+
+
+        self._awac_lambda = awac_lambda
+        self._exp_adv_max = exp_adv_max
+
+        self.intervention_penalty = intervention_penalty
+
+        self.normalized_states = normalized_states
 
         self.pretrain = pretrain
 
@@ -331,17 +351,19 @@ class SafeAgent:
         return value
 
     # Acting
-    def act(self, state: np.ndarray, device: str) -> [np.ndarray, bool]:
+    def act(self, state: np.ndarray, device: str, true_state = None) -> [np.ndarray, bool]:
+        if true_state is None:
+            true_state = state
         # check if state is safe
         if self.pretrain:
-            action = self.interventioner.act(state)
+            action = self.interventioner.act(true_state)
             intervention = True
         else:
-            if self.interventioner.check_safety(state):
+            if self.interventioner.check_safety(true_state):
                 action =  self.actor.act(state, device)
                 intervention = False
             else:
-                action =  self.interventioner.act(state)
+                action =  self.interventioner.act(true_state)
                 intervention = True
 
         return action, intervention
@@ -500,7 +522,7 @@ class SafeAgent:
         with torch.no_grad():
             values = self.critic(batch["obs"], unnormalize= True)
             next_value = self.critic(batch["next_obs"][-1], unnormalize= True)
-            rewards = torch.Tensor(batch["rewards"])
+            rewards = torch.Tensor(batch["rewards"]) + self.intervention_penalty*torch.Tensor(batch["interventions"])
             advantages = self.compute_GAE(rewards, values, next_value, batch["dones"])
         result = self.actor.log_prob(batch["obs"], batch["actions"], extra = True)
         log_ratio = (result["log_probs"] - curr_log_probs)
@@ -527,6 +549,8 @@ class SafeAgent:
         if update:
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
+            if self.grad_clip is not None:
+                torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)
             self.actor_optimizer.step()
             pg_magnitude = torch.norm(torch.stack([torch.norm(p.grad.detach(), 2.0) for p in list(self.actor.parameters())]), 2.0)
 
@@ -564,6 +588,38 @@ class SafeAgent:
                 delta = rewards[t] + self.gamma * next_value  - values[t]
                 adv[t] = last_gae_lam =  delta +  self.gamma * self.lambda_* last_gae_lam
         return adv
+
+
+    def offline_update(self, batch):
+        # update critic
+        critic_results = self.offline_update_critic(batch)
+        actor_results = self.offline_update_actor(batch)
+        return critic_results, actor_results
+    def offline_update_critic(self, batch):
+        with torch.no_grad():
+            next_values = self.critic(batch["next_obs"], unnormalize = True)
+            v_target = torch.Tensor(batch["rewards"]) + self.gamma * next_values
+
+        values = self.critic(batch["obs"], unnormalize = True)
+        critic_loss = self.critic_loss(values, v_target)
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        self.critic_optimizer.step()
+        return {"critic_loss": critic_loss.item()}
+
+    def offline_update_actor(self, batch):
+        with torch.no_grad():
+            actions = self.actor(batch["obs"])
+            values = self.critic(batch["obs"], actions, unnormalize = True)
+            q_values = self.critic(batch["obs"], batch["actions"], unnormalize = True)
+            advantages = q_values - values
+            weights = torch.clamp_max(torch.exp(advantages / self._awac_lambda), self._exp_adv_max)
+        result = self.actor.log_prob(batch["obs"], batch["actions"], extra = True, do_sum = False)
+        actor_loss = (-result.log_probs * weights).mean()
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        self.actor_optimizer.step()
+        return {"actor_loss": actor_loss.item()}
 
 
     def set_safe_threshold(self, threshold):

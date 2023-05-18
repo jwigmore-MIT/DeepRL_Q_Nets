@@ -17,10 +17,14 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
     actions = np.zeros([length, env.action_space.shape[0]])
     flows = np.zeros([length, env.action_space.shape[0]])
     arrivals = np.zeros([length, env.flat_qspace_size])
-
+    normalized = False
 
     # Get the current state of the environment
     next_ob = env.get_f_state()
+    # check if NormalizeObservation wrapper is used
+    if hasattr(env, "obs_rms"):
+        next_ob = env.normalize(next_ob)
+        normalized = True
 
     if show_progress:
         pbar = tqdm(range(length), desc=f"Generating Rollout {frac}")
@@ -30,7 +34,10 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
     # Perform Rollout
     for t in pbar:
         obs[t] = next_ob
-        actions[t], interventions[t] = agent.act(obs[t], device)
+        if normalized:
+            actions[t], interventions[t] = agent.act(obs[t], device, env.get_f_state())
+        else:
+            actions[t], interventions[t] = agent.act(obs[t], device)
         next_obs[t], rewards[t], terminals[t], timeouts[t], info = env.step(actions[t])
         if "final_info" in info:
             # info won't contain flows nor arrivals

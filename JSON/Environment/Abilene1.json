@@ -1,0 +1,80 @@
+{
+  "problem_instance": {
+    "name": "Abilene",
+    "notes": "Copy of Abilene network as in Xzinzhe's Paper",
+    "nodes": "[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]",
+    "links": "[[1,2], [1,3], [2,4], [2,3], [3,7], [4,6], [7,6], [7,9], [6,12], [9,12], [8,9], [8,10], [10,11], [11,12]]",
+    "classes": {
+      "1": {
+        "source": 1,
+        "destination": 12,
+        "arrival": 30,
+        "probability": 1
+      },
+      "2": {
+        "source": 8,
+        "destination": 12,
+        "arrival": 40,
+        "probability": 1
+      }
+    },
+    "capacities": {
+      "(1,2)": {
+        "capacity": 18,
+        "probability": 1
+      },
+      "(1,3)": {
+        "capacity": 36,
+        "probability": 1
+      },
+      "(2,4)": {
+        "capacity": 96,
+        "probability": 1
+      },
+      "(2,3)": {
+        "capacity": 88,
+        "probability": 1
+      },
+      "(3,7)": {
+        "capacity": 164,
+        "probability": 1
+      },
+      "(4,6)": {
+        "capacity": 66,
+        "probability": 1
+      },
+      "(7,6)": {
+        "capacity": 10,
+        "probability": 1
+      },
+      "(7,9)": {
+        "capacity": 186,
+        "probability": 1
+      },
+      "(6,12)": {
+        "capacity": 65,
+        "probability": 1
+      },
+      "(9,12)": {
+        "capacity": 29,
+        "probability": 1
+      },
+      "(8,9)": {
+        "capacity": 199,
+        "probability": 1
+      },
+      "(8,10)": {
+        "capacity": 126,
+        "probability": 1
+      },
+      "(10,11)": {
+        "capacity": 112,
+        "probability": 1
+      },
+      "(11,12)": {
+            "capacity": 60,
+            "probability": 1
+        }
+    }
+  }
+}
