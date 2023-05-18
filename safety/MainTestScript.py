@@ -34,7 +34,7 @@ class AgentConfig:
 
 @dataclass
 class EnvConfig:
-    env_json_path: str = "../JSON/Environment/Diamond1.json"
+    env_json_path: str = "../JSON/Environment/Diamond3.json"
     flat_state_dim: int = None
     flat_action_dim: int = None
     self_normalize_obs: bool = False
@@ -47,7 +47,7 @@ class RunSettings:
 
 @dataclass
 class IAOPGConfig:
-    rollout_length: int = 100
+    rollout_length: int = 1000
 
     horizon:int = 50000
     trigger_state: int = None
@@ -55,7 +55,7 @@ class IAOPGConfig:
 
     # Pretraining
     num_pretrain_rollouts = 1 # Number of rollouts to collect
-    pretrain_fit_epochs = 0# Number of epochs to fit the critic to the pretrain data
+    pretrain_fit_epochs = 10# Number of epochs to fit the critic to the pretrain data
     threshold_ratio = 2.0 # what percentage of the max cumulative state encountered should be the safety threshold
 
     # Modifications
@@ -83,7 +83,7 @@ class IAOPGConfig:
 class WandBConfig:
     project: str = "KeepItSimple"
     group: str = "SafeActor"
-    name: str = "Diamond1-IAOPG-MultiDiscrete"
+    name: str = "Diamond3-IAOPG-MultiDiscrete"
     checkpoints_path: Optional[str] = None
 @dataclass
 class LoggerConfig:

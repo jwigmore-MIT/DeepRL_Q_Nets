@@ -11,7 +11,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     return layer
 class MultiDiscreteActor(nn.Module):
 
-    def __init__(self, state_dim, hidden_dim, nvec: np.ndarray):
+    def __init__(self, state_dim, hidden_dim, action_ranges: np.ndarray):
         super().__init__()
 
         self.network = nn.Sequential(
@@ -22,7 +22,8 @@ class MultiDiscreteActor(nn.Module):
             layer_init(nn.Linear(hidden_dim, hidden_dim)),
             nn.ReLU()
         )
-        self.nvec = nvec
+        self.action_ranges = action_ranges
+        self.nvec = action_ranges[1,:] + 1
         self.actor_head = layer_init(nn.Linear(hidden_dim, np.sum(self.nvec)), std=0.01)
         self.train = True
 

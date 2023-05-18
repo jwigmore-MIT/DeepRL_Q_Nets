@@ -34,7 +34,7 @@ class AgentConfig:
 
 @dataclass
 class EnvConfig:
-    env_json_path: str = "../JSON/Environment/Abilene2.json"
+    env_json_path: str = "../../JSON/Environment/Abilene2.json"
     flat_state_dim: int = None
     flat_action_dim: int = None
     self_normalize_obs: bool = False

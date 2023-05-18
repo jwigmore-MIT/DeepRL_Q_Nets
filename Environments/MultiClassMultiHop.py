@@ -192,7 +192,7 @@ class MultiClassMultiHop(gym.Env):
         # get and record arrivals and next capacities
         self._sim_arrivals()
         info['arrivals'] = self.flatten_arrivals(deepcopy(self.Arr))
-
+        info['queues'] = self.get_f_state()
         self._sim_capacities()
         #info['Arr'] = keys_to_strings(deepcopy(self.Arr))
 

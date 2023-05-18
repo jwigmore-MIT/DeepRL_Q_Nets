@@ -4,7 +4,7 @@ from tqdm import tqdm
 import wandb
 import pandas as pd
 
-def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progress = True):
+def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progress = True, safe_agent = True):
 
     # Initialize temporary storage
     obs = np.zeros([length, env.observation_space.shape[0]])
@@ -13,6 +13,7 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
     terminals = np.zeros([length, 1])
     interventions = np.zeros([length, 1])
     timeouts = np.zeros([length, 1])
+    queues = np.zeros([length, env.observation_space.shape[0]])
     backlogs = np.zeros([length, 1])
     actions = np.zeros([length, env.action_space.shape[0]])
     flows = np.zeros([length, env.action_space.shape[0]])
@@ -37,7 +38,11 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
         if normalized:
             actions[t], interventions[t] = agent.act(obs[t], device, env.get_f_state())
         else:
-            actions[t], interventions[t] = agent.act(obs[t], device)
+            if safe_agent:
+                actions[t], interventions[t] = agent.act(obs[t], device)
+            else:
+                actions[t] = agent.act(obs[t], device)
+                interventions[t] = True
         next_obs[t], rewards[t], terminals[t], timeouts[t], info = env.step(actions[t])
         if "final_info" in info:
             # info won't contain flows nor arrivals
@@ -46,6 +51,7 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
             flows[t] = info['flows'][-1]
             arrivals[t] = info['arrivals'][-1]
             backlogs[t] = info['backlog'][-1]
+            queues[t] = info['queues'][-1]
         next_ob = next_obs[t]
     #terminals[t] = 1
     return {
@@ -58,7 +64,8 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
         "flows": flows,
         "arrivals": arrivals,
         "interventions": interventions,
-        "backlogs": backlogs
+        "backlogs": backlogs,
+        "queues": queues,
     }
 
 

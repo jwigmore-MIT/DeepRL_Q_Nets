@@ -86,5 +86,24 @@ class CrissCross2StaticPolicy(nn.Module):
         return flat_f[0,:]
 
 
+class DiamondOptimalPolicy(nn.Module):
+    def __init__(self, env):
+        super(DiamondOptimalPolicy, self).__init__()
+        self.env = deepcopy(env)
+        self.links = env.get_links()
+        self.action_format = env.get_action_format()
+        # check if env has attribute 'unwrapped'
+        self.optimal_action = np.ones([1,env.action_space.shape[0]])*env.action_space.high[-1]
+
+
+    def forward(self, state: dict, old_state=None):
+        return self._forward()
+
+    def act(self, state: dict, old_state=None):
+        return self._forward()
+
+    def _forward(self):
+        return self.optimal_action
+
 
 
