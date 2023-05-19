@@ -49,7 +49,7 @@ class RunSettings:
 class IAOPGConfig:
     rollout_length: int = 100
 
-    horizon:int = 50000
+    horizon:int = 3
     trigger_state: int = None
     updates_per_rollout: int = 10 #10
 

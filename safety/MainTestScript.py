@@ -18,7 +18,7 @@ from safety.buffers import Buffer
 from Environments.MultiClassMultiHop import MultiClassMultiHop
 from NonDRLPolicies.Backpressure import MCMHBackPressurePolicy
 from safety.wrappers import flatten_env, standard_reward_wrapper, normalize_obs_wrapper
-from safety.agent import Actor, Critic, SafeAgent, Interventioner, BetaActor, MultiDiscreteActor
+from safety.agent import Actor, Critic, SafeAgent, Interventioner, BetaActor, MultiDiscreteActor, ProbabilisticInterventioner
 import wandb
 
 from tqdm import tqdm
@@ -57,6 +57,8 @@ class IAOPGConfig:
     num_pretrain_rollouts = 1 # Number of rollouts to collect
     pretrain_fit_epochs = 10# Number of epochs to fit the critic to the pretrain data
     threshold_ratio = 2.0 # what percentage of the max cumulative state encountered should be the safety threshold
+    p_inter = True
+    inter_lambda = 1 # if greater than 0, the lambda term for the probabalistic interventioner
 
     # Modifications
     standardize_reward: bool = False
@@ -195,7 +197,10 @@ if __name__ == "__main__":
 
     # Initialize Intervention Actor
     safe_actor = MCMHBackPressurePolicy(env, M=True)
-    interventioner = Interventioner(safe_actor, trigger_state = config.iaopg.trigger_state)
+    if config.iaopg.p_inter:
+        interventioner = ProbabilisticInterventioner(safe_actor, trigger_state = config.iaopg.trigger_state, p_inter = config.iaopg.p_inter)
+    else:
+        interventioner = Interventioner(safe_actor, trigger_state = config.iaopg.trigger_state)
 
     # Initialize Intervention Agent
     agent = SafeAgent(actor, critic, actor_optim, critic_optim, interventioner,

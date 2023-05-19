@@ -8,12 +8,13 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
 
     # Initialize temporary storage
     obs = np.zeros([length, env.observation_space.shape[0]])
+    state = np.zeros([length, env.observation_space.shape[0]])
     next_obs = np.zeros([length, env.observation_space.shape[0]])
+    next_state = np.zeros([length, env.observation_space.shape[0]])
     rewards = np.zeros([length, 1])
     terminals = np.zeros([length, 1])
     interventions = np.zeros([length, 1])
     timeouts = np.zeros([length, 1])
-    queues = np.zeros([length, env.observation_space.shape[0]])
     backlogs = np.zeros([length, 1])
     actions = np.zeros([length, env.action_space.shape[0]])
     flows = np.zeros([length, env.action_space.shape[0]])
@@ -51,7 +52,8 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
             flows[t] = info['flows'][-1]
             arrivals[t] = info['arrivals'][-1]
             backlogs[t] = info['backlog'][-1]
-            queues[t] = info['queues'][-1]
+            state[t] = info['state'][-1]
+            next_state[t] = info['next_state'][-1]
         next_ob = next_obs[t]
     #terminals[t] = 1
     return {
@@ -65,7 +67,8 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
         "arrivals": arrivals,
         "interventions": interventions,
         "backlogs": backlogs,
-        "queues": queues,
+        "state": state,
+        "next_state": next_state
     }
 
 

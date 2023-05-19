@@ -269,7 +269,6 @@ class Interventioner(nn.Module):
 
 
 
-
     def check_safety(self, state):
         # In unsafe state, return False, otherwise True
 
@@ -280,6 +279,35 @@ class Interventioner(nn.Module):
 
     def act(self, state, device = None):
         return self.safe_actor.act(state)
+
+
+class ProbabilisticInterventioner(nn.Module):
+    """
+    Allow for some probability of intervention in unsafe states near the boundary
+    """
+    def __init__(self, safe_actor, trigger_state = 0, lambda_ = 1.0):
+        super().__init__()
+        self.safe_actor = safe_actor
+        self.trigger_state = trigger_state
+        self.lambda_ = lambda_
+
+    def check_safety(self, state):
+        # In unsafe state, return False, otherwise True
+        gap = np.sum(state) -self.trigger_state
+        if gap <= 0:
+            return False
+        else:
+            # sample from an exponential distribution
+            # if the gap is small, the probability of intervention is high
+            # if the gap is large, the probability of intervention is low
+            # the probability of intervention is 1 - exp(-gap)
+            prob = 1 - np.exp(-self.lambda_*gap)
+            if np.random.rand() < prob:
+                return False
+            return True
+
+
+
 
 
 class SafeAgent:

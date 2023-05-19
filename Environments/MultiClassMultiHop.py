@@ -178,7 +178,7 @@ class MultiClassMultiHop(gym.Env):
         return self._step(action)
     def _step(self, action: Dict):
         info = {'action':self.flatten_action(action)}
-        obs = self.get_state()
+        obs = info["state"] = self.get_f_state()
 
         # copy action dict, add external flows
         flows = action.copy()
@@ -192,7 +192,6 @@ class MultiClassMultiHop(gym.Env):
         # get and record arrivals and next capacities
         self._sim_arrivals()
         info['arrivals'] = self.flatten_arrivals(deepcopy(self.Arr))
-        info['queues'] = self.get_f_state()
         self._sim_capacities()
         #info['Arr'] = keys_to_strings(deepcopy(self.Arr))
 
@@ -202,8 +201,8 @@ class MultiClassMultiHop(gym.Env):
         terminated = False
         truncated = False
 
-        new_obs = self.get_state()
-
+        new_obs  = self.get_state()
+        info["next_state"] = self.get_f_state()
 
 
         return new_obs, reward, terminated, truncated, info
