@@ -34,7 +34,7 @@ class AgentConfig:
 
 @dataclass
 class EnvConfig:
-    env_json_path: str = "../JSON/Environment/Diamond3.json"
+    env_json_path: str = "../JSON/Environment/Diamond2.json"
     flat_state_dim: int = None
     flat_action_dim: int = None
     self_normalize_obs: bool = False
@@ -47,24 +47,24 @@ class RunSettings:
 
 @dataclass
 class IAOPGConfig:
-    rollout_length: int = 1000
+    rollout_length: int = 100
 
-    horizon:int = 50000
-    trigger_state: int = None
+    horizon:int = 100000
+    trigger_state: int = 20
     updates_per_rollout: int = 10 #10
 
     # Pretraining
-    num_pretrain_rollouts = 1 # Number of rollouts to collect
-    pretrain_fit_epochs = 10# Number of epochs to fit the critic to the pretrain data
-    threshold_ratio = 2.0 # what percentage of the max cumulative state encountered should be the safety threshold
-    p_inter = True
-    inter_lambda = 1 # if greater than 0, the lambda term for the probabalistic interventioner
+    num_pretrain_rollouts: int = 0 # Number of rollouts to collect
+    pretrain_fit_epochs: int = 10# Number of epochs to fit the critic to the pretrain data
+    threshold_ratio: float = 2.0 # what percentage of the max cumulative state encountered should be the safety threshold
+    interventioner: str = "Deterministic" # "Deterministic", "Probabilistic", "None
+    inter_lambda: float = 2 # if greater than 0, the lambda term for the probabalistic interventioner
 
     # Modifications
     standardize_reward: bool = False
     normalize_obs: Union[bool, str] = "gym" # "custom", "gym"
     normalize_values: bool = True
-    norm_states: bool = False
+    norm_states: bool = False # don't use
 
     ppo: bool = True
     ppo_clip_coef: float = 0.2
@@ -85,7 +85,7 @@ class IAOPGConfig:
 class WandBConfig:
     project: str = "KeepItSimple"
     group: str = "SafeActor"
-    name: str = "Diamond3-IAOPG-MultiDiscrete"
+    name: str = "Diamond2-IAOPG-Baseline"
     checkpoints_path: Optional[str] = None
 @dataclass
 class LoggerConfig:
@@ -197,9 +197,9 @@ if __name__ == "__main__":
 
     # Initialize Intervention Actor
     safe_actor = MCMHBackPressurePolicy(env, M=True)
-    if config.iaopg.p_inter:
-        interventioner = ProbabilisticInterventioner(safe_actor, trigger_state = config.iaopg.trigger_state, p_inter = config.iaopg.p_inter)
-    else:
+    if config.iaopg.interventioner == "Probabilistic":
+        interventioner = ProbabilisticInterventioner(safe_actor, trigger_state = config.iaopg.trigger_state, lambda_ = config.iaopg.inter_lambda)
+    elif config.iaopg.interventioner == "Deterministic":
         interventioner = Interventioner(safe_actor, trigger_state = config.iaopg.trigger_state)
 
     # Initialize Intervention Agent

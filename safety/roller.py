@@ -14,6 +14,7 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
     rewards = np.zeros([length, 1])
     terminals = np.zeros([length, 1])
     interventions = np.zeros([length, 1])
+    intervention_prob = np.zeros([length, 1])
     timeouts = np.zeros([length, 1])
     backlogs = np.zeros([length, 1])
     actions = np.zeros([length, env.action_space.shape[0]])
@@ -37,13 +38,14 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
     for t in pbar:
         obs[t] = next_ob
         if normalized:
-            actions[t], interventions[t] = agent.act(obs[t], device, env.get_f_state())
+            actions[t], interventions[t], intervention_prob[t]  = agent.act(obs[t], device, env.get_f_state())
         else:
             if safe_agent:
-                actions[t], interventions[t] = agent.act(obs[t], device)
+                actions[t], interventions[t], intervention_prob[t] = agent.act(obs[t], device)
             else:
                 actions[t] = agent.act(obs[t], device)
                 interventions[t] = True
+                intervention_prob[t] = 1
         next_obs[t], rewards[t], terminals[t], timeouts[t], info = env.step(actions[t])
         if "final_info" in info:
             # info won't contain flows nor arrivals
@@ -66,6 +68,7 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
         "flows": flows,
         "arrivals": arrivals,
         "interventions": interventions,
+        "intervention_prob": intervention_prob,
         "backlogs": backlogs,
         "state": state,
         "next_state": next_state

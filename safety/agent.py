@@ -293,20 +293,16 @@ class ProbabilisticInterventioner(nn.Module):
 
     def check_safety(self, state):
         # In unsafe state, return False, otherwise True
-        gap = np.sum(state) -self.trigger_state
-        if gap <= 0:
-            return False
+        gap = self.trigger_state - np.sum(state)
+        prob = min(1,np.exp(-self.lambda_ * gap))  # probability of intervention
+        if np.random.rand() < prob:
+            return (False, prob)
         else:
-            # sample from an exponential distribution
-            # if the gap is small, the probability of intervention is high
-            # if the gap is large, the probability of intervention is low
-            # the probability of intervention is 1 - exp(-gap)
-            prob = 1 - np.exp(-self.lambda_*gap)
-            if np.random.rand() < prob:
-                return False
-            return True
+            return (True, prob)
 
 
+    def act(self, state, device = None):
+        return self.safe_actor.act(state)
 
 
 
@@ -346,6 +342,7 @@ class SafeAgent:
         self.critic_optimizer = critic_optimizer
         self.interventioner = interventioner
 
+
         self.updates_per_rollout = updates_per_rollout
         self.normalize_values = normalize_values
         self.value_mean = None
@@ -373,6 +370,7 @@ class SafeAgent:
         self.pretrain = pretrain
 
     def critic(self, state: torch.Tensor, unnormalize = False) -> torch.Tensor:
+        # If
         value = self._critic(state)
         if unnormalize and self.normalize_values and \
                 self.value_mean is not None and self.value_std is not None:
@@ -387,40 +385,50 @@ class SafeAgent:
         if self.pretrain:
             action = self.interventioner.act(true_state)
             intervention = True
+            prob = 1
         else:
-            if self.interventioner.check_safety(true_state):
+            safety_check = self.interventioner.check_safety(true_state)
+            if isinstance(safety_check, tuple):
+                is_safe, prob = safety_check
+            else:
+                is_safe = safety_check
+                prob = 1- is_safe
+            if is_safe:
                 action =  self.actor.act(state, device)
                 intervention = False
             else:
                 action =  self.interventioner.act(true_state)
                 intervention = True
 
-        return action, intervention
+        return action, intervention, prob
 
     def update(self, batch):
 
         results = {}
 
-        # results = {"critic_loss":[],
-        #            "values_mean":[],
-        #            "values_std":[],
-        #            "targets_mean":[],
-        #             "targets_std":[],
-        #            "actor_loss":[],
-        #            "vt_error":[],
-        #            "log_probs":[],
-        #            "advantages":[],
-        #            "avg_policy_means": [],
-        #            "policy_stds": []}
 
         if self.ppo:
             with torch.no_grad():
                 curr_log_probs = self.actor.log_prob(batch["obs"], batch["actions"])
         else:
             curr_log_probs = None
+
+        with torch.no_grad(): # compute critic target for all updates for this batch
+            b_values = self.critic(batch["obs"], unnormalize=True)  # unnormalized critic output
+            b_next_value = self.critic(batch["next_obs"][-1],
+                                     unnormalize=True)  # unnormalized critic output for final next_obs (for bootstrapping)
+            rewards = torch.Tensor(batch["rewards"])  # from batch
+            b_advantages = self.compute_GAE(rewards, b_values, b_next_value, batch["dones"])  # unnormalized advantages
+            target = b_advantages + b_values  # unnormalized returns
+            if self.normalize_values:
+                self.value_mean = target.mean().item()
+                self.value_std = target.std().item()
+                target = (target - self.value_mean) / max(self.value_std, 1e-8)
+
         for i in range(self.updates_per_rollout):
 
-            critic_results = self.update_critic(batch)
+
+            critic_results = self.update_critic(batch, target)
             actor_results = self.update_actor(batch, curr_log_probs)
 
 
@@ -446,9 +454,9 @@ class SafeAgent:
 
         return results
 
-    def update_critic(self, batch):
+    def update_critic(self, batch, target):
         # Compute the advantage
-        target = self.compute_critic_target(batch)  # target can be normalized or unnormalized
+        #target = self.compute_critic_target(batch)  # target can be normalized or unnormalized
         norm_values = self.critic(batch["obs"], unnormalize=False) # never fit to unnormalized values
         critic_loss = self.critic_loss(norm_values, target)
         self.critic_optimizer.zero_grad()
@@ -456,6 +464,15 @@ class SafeAgent:
         self.critic_optimizer.step()
         # Compute "Critic Error" = (values - targets)
         critic_error = (norm_values - target)
+        if self.normalize_values:
+            unnorm_target = target * max(self.value_std, 1e-8) + self.value_mean
+            unnorm_values = norm_values * max(self.value_std, 1e-8) + self.value_mean
+            unnorm_critic_error = (unnorm_values - unnorm_target)
+            explained_variance = 1 - (unnorm_critic_error.var() / unnorm_target.var())
+        else:
+            unnorm_critic_error = critic_error
+            explained_variance = 1 - (critic_error.var() / target.var())
+
         max_critic_error = critic_error.max().item()
         min_critic_error = critic_error.min().item()
         if abs(max_critic_error) > abs(min_critic_error):
@@ -464,12 +481,16 @@ class SafeAgent:
             max_critic_dev = min_critic_error
         return {"critic_loss": critic_loss.item(),
                 "max_critic_dev: ": max_critic_dev,
-                "avg_critic_error: ": critic_error.abs().mean().item()}
+                "avg_critic_error: ": critic_error.abs().mean().item(),
+                "avg_critic_error_unnorm: ": unnorm_critic_error.abs().mean().item(),
+                "explained_variance": explained_variance.item(),
+                "target_mean": self.value_mean,
+                "target_std": self.value_std}
 
     def compute_critic_target(self, batch):
         with torch.no_grad():
             values = self.critic(batch["obs"], unnormalize= True) # unnormalized critic output
-            next_value = self.critic(batch["next_obs"][-1], unnormalize=True) # unnormalized critic output
+            next_value = self.critic(batch["next_obs"][-1], unnormalize=True) # unnormalized critic output for final next_obs (for bootstrapping)
             rewards = torch.Tensor(batch["rewards"]) # from batch
             advantages = self.compute_GAE(rewards, values, next_value, batch["dones"]) # unnormalized advantages
             target = advantages + values # unnormalized target
@@ -590,6 +611,7 @@ class SafeAgent:
         for key in result.keys():
             result[key] = result[key].mean().item()
         result["actor_loss"] = actor_loss.item()
+        result["advantages"] = advantages.mean().item()
         result["approx_kl"] = approx_kl.item()
         result["clip_frac"] = clip_frac
         result["actor_loss_unclipped"] = pg_loss1.mean().item()

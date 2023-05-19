@@ -1,33 +1,33 @@
 {
   "problem_instance": {
-    "name": "Diamond4",
-    "notes": "C = 8, optimal policy is to route A/2 = 4 packets over each path in each timestep",
+    "name": "Diamond2",
+    "notes": "C = 8, A = C/2 = 4, optimal policy is to route 2 packets over each path in each timestep",
     "nodes": "[1, 2, 3, 4]",
     "links": "[[1,2], [1,3], [2,4], [3,4]]",
     "classes": {
       "1": {
         "source": 1,
         "destination": 4,
-        "arrival": 8,
-        "probability": 1
+        "arrival": 6,
+        "probability": 0.75
       }
 
     },
     "capacities": {
       "(1,2)": {
-        "capacity": 16,
+        "capacity": 8,
         "probability": 1
       },
       "(1,3)": {
-        "capacity": 16,
+        "capacity": 8,
         "probability": 1
       },
       "(2,4)": {
-        "capacity": 12,
+        "capacity": 6,
         "probability": 1
       },
        "(3,4)": {
-        "capacity": 4,
+        "capacity": 2,
         "probability": 1
       }
     }

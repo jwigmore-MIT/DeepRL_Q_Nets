@@ -33,7 +33,7 @@ class AgentConfig:
 
 @dataclass
 class EnvConfig:
-    env_json_path: str = "../JSON/Environment/Diamond2.json"
+    env_json_path: str = "../JSON/Environment/Diamond4.json"
     flat_state_dim: int = None
     flat_action_dim: int = None
     self_normalize_obs: bool = False
@@ -56,7 +56,7 @@ class TestingConfig:
 class WandBConfig:
     project: str = "KeepItSimple"
     group: str = "Baseline"
-    name: str = "Diamond2-Backpressure"
+    name: str = "Diamond4-Backpressure"
     checkpoints_path: Optional[str] = None
 @dataclass
 class LoggerConfig:
@@ -147,13 +147,13 @@ if __name__ == "__main__":
 
     # init buffer
 
-    nvec = mask_ranges[1,:] + 1
-    actor = MultiDiscreteActor(config.env.flat_state_dim, config.agent.actor_hidden_dim, nvec)
-    actor.to(config.device)
-    critic = Critic(config.env.flat_state_dim, config.agent.critic_hidden_dim)
-    critic.to(config.device)
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=config.agent.learning_rate)
-    critic_optim = torch.optim.Adam(critic.parameters(), lr=config.agent.learning_rate)
+    # nvec = mask_ranges[1,:] + 1
+    # actor = MultiDiscreteActor(config.env.flat_state_dim, config.agent.actor_hidden_dim, nvec)
+    # actor.to(config.device)
+    # critic = Critic(config.env.flat_state_dim, config.agent.critic_hidden_dim)
+    # critic.to(config.device)
+    # actor_optim = torch.optim.Adam(actor.parameters(), lr=config.agent.learning_rate)
+    # critic_optim = torch.optim.Adam(critic.parameters(), lr=config.agent.learning_rate)
 
     # Initialize Intervention Actor
     if config.testing.policy == "Optimal":
