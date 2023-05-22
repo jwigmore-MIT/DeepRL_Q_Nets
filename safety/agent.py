@@ -323,6 +323,7 @@ class SafeAgent:
             ppo: bool = False,
             ppo_clip_coef: float = 0.25,
             kl_coef: float = 0.0, # Beta in PPO paper
+            entropy_coef: float = 0.0,
             kl_target: float = None,
             intervention_penalty: float = 0.0,
             grad_clip: float = None,
@@ -356,6 +357,7 @@ class SafeAgent:
         self.ppo_clip_coef = ppo_clip_coef
         self.value_clip = value_clip
         self.kl_coef = kl_coef
+        self.entropy_coef = entropy_coef
         self.kl_target = kl_target
         self.grad_clip = grad_clip
 
@@ -595,7 +597,8 @@ class SafeAgent:
         pg_loss1 = -advantages * ratio # unclipped loss
         pg_loss2 = -advantages * torch.clamp(ratio, 1.0 - self.ppo_clip_coef, 1.0 + self.ppo_clip_coef) # clipped loss
         kl_loss = self.kl_coef * approx_kl
-        actor_loss = torch.max(pg_loss1, pg_loss2).mean() + kl_loss
+        entropy_loss = self.entropy_coef * result["entropy"] # fix this
+        actor_loss = torch.max(pg_loss1, pg_loss2).mean() + kl_loss + entropy_loss
         if update:
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
@@ -613,10 +616,13 @@ class SafeAgent:
         result["actor_loss"] = actor_loss.item()
         result["advantages"] = advantages.mean().item()
         result["approx_kl"] = approx_kl.item()
+        result["entropy_loss"] = entropy_loss.item()
+        result["kl_loss"] = kl_loss.item()
         result["clip_frac"] = clip_frac
         result["actor_loss_unclipped"] = pg_loss1.mean().item()
         result["stop_update"] = not update
         result["pg_magnitude"] = pg_magnitude.item()
+
         return result
 
 

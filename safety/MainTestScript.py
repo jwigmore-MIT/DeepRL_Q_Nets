@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 @dataclass
 class AgentConfig:
-    learning_rate: float = 3e-4
+    learning_rate: float = 1e-4
     gamma: float = 0.99
     lambda_: float = 0.95
     actor_hidden_dim: int = 64
@@ -34,7 +34,7 @@ class AgentConfig:
 
 @dataclass
 class EnvConfig:
-    env_json_path: str = "../JSON/Environment/Diamond2.json"
+    env_json_path: str = "../JSON/Environment/Diamond2R05.json"
     flat_state_dim: int = None
     flat_action_dim: int = None
     self_normalize_obs: bool = False
@@ -69,6 +69,7 @@ class IAOPGConfig:
     ppo: bool = True
     ppo_clip_coef: float = 0.2
     kl_coef: float = 1.0
+    entropy_coef: float = 0
     kl_target: float = 1.0
     grad_clip: float = None
 
@@ -85,7 +86,7 @@ class IAOPGConfig:
 class WandBConfig:
     project: str = "KeepItSimple"
     group: str = "SafeActor"
-    name: str = "Diamond2-IAOPG-Baseline"
+    name: str = "Diamond2R05-IAOPG-1000steps2"
     checkpoints_path: Optional[str] = None
 @dataclass
 class LoggerConfig:
@@ -210,6 +211,7 @@ if __name__ == "__main__":
                       updates_per_rollout=config.iaopg.updates_per_rollout,
                       ppo_clip_coef=config.iaopg.ppo_clip_coef,
                       ppo = config.iaopg.ppo,
+                      entropy_coef=config.iaopg.entropy_coef,
                       kl_coef=config.iaopg.kl_coef,
                       kl_target=config.iaopg.kl_target,
                       intervention_penalty=config.iaopg.intervention_penalty,
