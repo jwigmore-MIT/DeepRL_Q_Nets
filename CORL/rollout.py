@@ -4,7 +4,7 @@ import torch
 import os
 import pickle
 from copy import deepcopy
-def gen_rollout(env, agent, length, device = "cpu", init_reset = True, frac = None, show_pbar = True ):
+def gen_rollout(env, agent, length, device = "cpu", init_reset = True, frac = None, show_pbar = True, pbar_desc = "Generating Rollout"):
     """
 
     :param env:
@@ -31,7 +31,7 @@ def gen_rollout(env, agent, length, device = "cpu", init_reset = True, frac = No
         next_ob = env.get_f_state()
     # Setup progress bar
     if show_pbar:
-        pbar = tqdm(range(length), desc=f"Generating Rollout {frac}")
+        pbar = tqdm(range(length), desc=f"{pbar_desc} {frac}")
     else:
         pbar = range(length)
 
@@ -61,7 +61,7 @@ def gen_rollout(env, agent, length, device = "cpu", init_reset = True, frac = No
     }
 
 
-def gen_bp_dataset(config, M = True, env = None):
+def gen_bp_dataset(config, M = True, env = None, pbar_desc = "Generating BP Dataset"):
     from environment_init import make_MCMH_env
     from NonDRLPolicies.Backpressure import MCMHBackPressurePolicy
 
@@ -76,7 +76,7 @@ def gen_bp_dataset(config, M = True, env = None):
 
     with torch.no_grad():
         for n_rollout in range(num_rollouts):
-            traj_dicts.append(gen_rollout(env, agent, rollout_length, frac = f"{n_rollout + 1}/{num_rollouts}"))
+            traj_dicts.append(gen_rollout(env, agent, rollout_length, pbar_desc= pbar_desc, frac= f"{n_rollout + 1}/{num_rollouts}"))
     if num_rollouts > 1:
         dataset = {}
         for key, value in traj_dicts[0].items():
@@ -101,7 +101,7 @@ def gen_bp_dataset(config, M = True, env = None):
 
     return dataset, datainfo
 
-def gen_random_action_dataset(config, env = None):
+def gen_random_action_dataset(config, env = None, pbar_desc = "Generating Random Action Dataset"):
     from environment_init import make_MCMH_env
     from NonDRLPolicies.Randomized_policy import RandomPolicy
 
@@ -116,7 +116,7 @@ def gen_random_action_dataset(config, env = None):
 
     with torch.no_grad():
         for n_rollout in range(num_rollouts):
-            traj_dicts.append(gen_rollout(env, agent, rollout_length, frac = f"{n_rollout + 1}/{num_rollouts}"))
+            traj_dicts.append(gen_rollout(env, agent, rollout_length, pbar_desc = pbar_desc, frac = f"{n_rollout + 1}/{num_rollouts}"))
     if num_rollouts > 1:
         dataset = {}
         for key, value in traj_dicts[0].items():

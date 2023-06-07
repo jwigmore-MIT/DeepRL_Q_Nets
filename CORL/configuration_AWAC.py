@@ -7,14 +7,14 @@ import os
 
 @dataclass
 class WandbConfig:
-    project: str = "Large Dataset Testing"
+    project: str = "NewAWAC"
     group: str = ""
-    name: str = "AWAC"
+    name: str = "Diamond2R05-AWAC"
     checkpoints_path: Optional[str] = "../Saved_Models/AWAC/"
 
 @dataclass
 class EnvConfig:
-    env_json_path: str = "../JSON/Environment/CrissCross4.json"
+    env_json_path: str = "../JSON/Environment/Diamond2R05.json"
 
     def __post_init__(self):
         self.name = os.path.splitext(os.path.basename(self.env_json_path))[0]
@@ -24,7 +24,7 @@ class OfflineDataConfig:
     load_path: str = "offline_data/Env1b_100x1000.data"  # "offline_data\\CrissCross4v2_AWAC-04-18_1546.data"
     save_path: str = "offline_data"
     rollout_length: int = 1000
-    num_rollouts: int = 100
+    num_rollouts: int = 10
     bp_seed: int = 102921
     num_transitions: int = 0
     modified: bool = False # if these parameters are changed at run-time i.e. the data loaded used different parameters during its generation
@@ -48,11 +48,11 @@ class TestConfig:
 
 @dataclass
 class OfflineTrainConfig:
-    num_epochs: int =  1000
+    num_epochs: int =  100
     eval_freq: int = 5 # how often to evaluate the policy during training in terms of epochs
-    save_freq: int = 100 # how often to save the model in terms of epochs
-    reward_log_freq: int = 10 # how often to log the reward in terms of epochs
-    batch_size: int = 1000
+    save_freq: int = 10 # how often to save the model in terms of epochs
+    reward_log_freq: int = 5 # how often to log the reward in terms of epochs
+    batch_size: int = 256
     learning_rate: float = 3e-4
     gamma: float = 0.99
     tau: float = 5e-3
@@ -105,6 +105,8 @@ class Config:
     checkpoints_path: str = "Saved_Models"
     normalize_states = True
     save_final_buffer = True
+    seed: int = 5031997
+
 
     run: RunSettings = field(default_factory=RunSettings)
     wandb: WandbConfig = field(default_factory=WandbConfig)

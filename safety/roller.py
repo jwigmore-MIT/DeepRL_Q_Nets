@@ -4,7 +4,7 @@ from tqdm import tqdm
 import wandb
 import pandas as pd
 
-def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progress = True, safe_agent = True):
+def gen_rollout(env, agent, length = 1000, device = "cpu", pbar_desc = "Generating Rollout", frac = "", show_progress = True, safe_agent = True):
 
     # Initialize temporary storage
     obs = np.zeros([length, env.observation_space.shape[0]])
@@ -30,7 +30,7 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", frac = "", show_progr
         normalized = True
 
     if show_progress:
-        pbar = tqdm(range(length), desc=f"Generating Rollout {frac}")
+        pbar = tqdm(range(length), desc=f"{pbar_desc} {frac}")
     else:
         pbar = range(length)
 

@@ -19,7 +19,7 @@ class Buffer:
             state_dim: int,
             action_dim: int,
             buffer_size: int,
-            norm_states: bool = False,
+            norm_states: bool = False, # state normalization is handled be gym
             device: str = "cpu",
     ):
         self._state_dim = state_dim
@@ -34,7 +34,7 @@ class Buffer:
         self._next_states = np.zeros((buffer_size, state_dim), dtype=np.float32)
         self._dones = np.zeros([buffer_size,1], dtype=np.float32)
         self._interventions = np.zeros([buffer_size,1], dtype=np.float32)
-        self.norm_states = norm_states
+        self.norm_states = False
         if norm_states:
             self._n_states = np.zeros((buffer_size, state_dim), dtype=np.float32)
             self._n_next_states = np.zeros((buffer_size, state_dim), dtype=np.float32)

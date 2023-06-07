@@ -100,37 +100,37 @@ def log_offline_metrics(metrics):
         log_dict.update({"offline/step": i})
         wandb.log(log_dict)
 
-def log_update_metrics(metrics, eps = None, type = "all"):
+def log_update_metrics(metrics, eps = None, type = "all", glob = "update"):
     # type can be "all" or "final", refers to logging metrics from all epochs
     # or just the final epoch
     if type == "all":
         for key in metrics.keys():
             if len(metrics[key]) == 0:
                 continue
-            wandb.define_metric(f"update/{key}-mean", summary = "mean")
-            wandb.define_metric(f"update/{key}-max", summary = "max")
-            wandb.define_metric(f"update/{key}-min", summary = "min")
+            wandb.define_metric(f"{glob}/{key}-mean", summary = "mean")
+            wandb.define_metric(f"{glob}/{key}-max", summary = "max")
+            wandb.define_metric(f"{glob}/{key}-min", summary = "min")
         log_dict = {}
         for key in metrics.keys():
             if len(metrics[key]) == 0:
                 continue
-            log_dict[f"update/{key}-mean"] = np.mean(metrics[key])
-            log_dict[f"update/{key}-max"] = np.max(metrics[key])
-            log_dict[f"update/{key}-min"] = np.min(metrics[key])
+            log_dict[f"{glob}/{key}-mean"] = np.mean(metrics[key])
+            log_dict[f"{glob}/{key}-max"] = np.max(metrics[key])
+            log_dict[f"{glob}/{key}-min"] = np.min(metrics[key])
         if eps is not None:
-            log_dict.update({"update/eps": eps})
+            log_dict.update({f"{glob}/eps": eps})
     if type == "final":
         for key in metrics.keys():
             if len(metrics[key]) == 0:
                 continue
-            wandb.define_metric(f"update/{key}")
+            wandb.define_metric(f"{glob}/{key}")
         log_dict = {}
         for key in metrics.keys():
             if len(metrics[key]) == 0:
                 continue
-            log_dict[f"update/{key}"] = metrics[key][-1]
+            log_dict[f"{glob}/{key}"] = metrics[key][-1]
         if eps is not None:
-            log_dict.update({"update/eps": eps})
+            log_dict.update({f"{glob}/eps": eps})
 
     wandb.log(log_dict)
 

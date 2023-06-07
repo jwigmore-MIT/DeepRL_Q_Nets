@@ -14,7 +14,7 @@
       "2": {
         "source": 1,
         "destination": 5,
-        "arrival": 2,
+        "arrival": 5,
         "probability": 1
       }
     },

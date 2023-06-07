@@ -13,7 +13,11 @@ class MCMHBackPressurePolicy(nn.Module):
     # initialization
     def __init__(self, env, M = False, map_to_discrete = False, tianshou = False, rescale = None):
         super(MCMHBackPressurePolicy, self).__init__()
-        self.env = deepcopy(env)
+        # check if env has attribute unwrapped
+        if hasattr(env, 'unwrapped'):
+            self.env = env.unwrapped
+        else:
+            self.env = deepcopy(env)
         self.links = env.get_links()
         self.action_format = env.get_action_format()
         self.modified = M
@@ -37,6 +41,9 @@ class MCMHBackPressurePolicy(nn.Module):
     def act(self, state: dict, old_state=None):
         action  = self._forward(state, old_state)
         return action
+
+    def predict(self, observation, state=None, episode_start=None, deterministic=False):
+        return self._forward(observation), state
 
 
     def _forward(self, state : dict, old_state = None):

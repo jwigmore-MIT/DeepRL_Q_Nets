@@ -189,9 +189,9 @@ def init_replay_buffer(config, how = "gen", env = None):# need to normalize rewa
     datasets = {}
     datainfos ={}
     if "BPM" in how:
-        datasets["BPM"], datainfos["BPM"] = gen_bp_dataset(config, M=True, env = env)
+        datasets["BPM"], datainfos["BPM"] = gen_bp_dataset(config, M=True, env = env, pbar_desc = "Generating BPM dataset")
     if "random" in how:
-        datasets["random"], datainfos["random"] = gen_random_action_dataset(config, env = env)
+        datasets["random"], datainfos["random"] = gen_random_action_dataset(config, env = env, pbar_desc = "Generating random action dataset")
     elif "load" in how:
         data = pickle.load(open(config.run_settings["LoadDataset"], 'rb'))
         datasets["load"] = data["dataset"]

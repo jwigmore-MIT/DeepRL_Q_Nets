@@ -26,15 +26,17 @@ from tqdm import tqdm
 
 @dataclass
 class AgentConfig:
-    learning_rate: float = 1e-4
+
+
+    learning_rate: float = 3e-4
     gamma: float = 0.99
-    lambda_: float = 0.95
+    gae_lambda: float = 0.95
     actor_hidden_dim: int = 64
     critic_hidden_dim: int = 64
 
 @dataclass
 class EnvConfig:
-    env_json_path: str = "../JSON/Environment/Diamond2R05.json"
+    env_json_path: str = "../JSON/Environment/OnePacket/SixNodeOP.json"
     flat_state_dim: int = None
     flat_action_dim: int = None
     self_normalize_obs: bool = False
@@ -49,8 +51,8 @@ class RunSettings:
 class IAOPGConfig:
     rollout_length: int = 100
 
-    horizon:int = 100000
-    trigger_state: int = 20
+    horizon:int = 1000000
+    trigger_state: int = 60
     updates_per_rollout: int = 10 #10
 
     # Pretraining
@@ -64,14 +66,15 @@ class IAOPGConfig:
     standardize_reward: bool = False
     normalize_obs: Union[bool, str] = "gym" # "custom", "gym"
     normalize_values: bool = True
+    target_update_rate: float = 0.2
     norm_states: bool = False # don't use
 
     ppo: bool = True
     ppo_clip_coef: float = 0.2
-    kl_coef: float = 1.0
-    entropy_coef: float = 0
-    kl_target: float = 1.0
-    grad_clip: float = None
+    kl_coef: float = 1
+    entropy_coef: float = 5
+    kl_target: float = 4
+    grad_clip: float = 10
 
     intervention_penalty: float = 0
 
@@ -86,7 +89,7 @@ class IAOPGConfig:
 class WandBConfig:
     project: str = "KeepItSimple"
     group: str = "SafeActor"
-    name: str = "Diamond2R05-IAOPG-1000steps2"
+    name: str = "SixNodeOP-IAOPG"
     checkpoints_path: Optional[str] = None
 @dataclass
 class LoggerConfig:
@@ -207,7 +210,8 @@ if __name__ == "__main__":
     agent = SafeAgent(actor, critic, actor_optim, critic_optim, interventioner,
                       gamma = config.agent.gamma,
                       normalize_values = config.iaopg.normalize_values,
-                      lambda_ = config.agent.lambda_,
+                      target_update_rate=config.iaopg.target_update_rate,
+                      gae_lambda = config.agent.gae_lambda,
                       updates_per_rollout=config.iaopg.updates_per_rollout,
                       ppo_clip_coef=config.iaopg.ppo_clip_coef,
                       ppo = config.iaopg.ppo,

@@ -33,7 +33,7 @@ class AgentConfig:
 
 @dataclass
 class EnvConfig:
-    env_json_path: str = "../JSON/Environment/Diamond4.json"
+    env_json_path: str = "../JSON/Environment/OnePacket/SixNodeOP.json"
     flat_state_dim: int = None
     flat_action_dim: int = None
     self_normalize_obs: bool = False
@@ -54,9 +54,9 @@ class TestingConfig:
 
 @dataclass
 class WandBConfig:
-    project: str = "KeepItSimple"
+    project: str = "OnePacket"
     group: str = "Baseline"
-    name: str = "Diamond4-Backpressure"
+    name: str = "SixNodeOP-Backpressure"
     checkpoints_path: Optional[str] = None
 @dataclass
 class LoggerConfig:

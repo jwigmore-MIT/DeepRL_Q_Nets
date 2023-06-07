@@ -260,6 +260,8 @@ class Critic(nn.Module):
         value = self._mlp(state)
         return value
 
+
+
 class Interventioner(nn.Module):
 
     def __init__(self, safe_actor, trigger_state = 0):
@@ -285,16 +287,16 @@ class ProbabilisticInterventioner(nn.Module):
     """
     Allow for some probability of intervention in unsafe states near the boundary
     """
-    def __init__(self, safe_actor, trigger_state = 0, lambda_ = 1.0):
+    def __init__(self, safe_actor, trigger_state = 0, omega = 1.0):
         super().__init__()
         self.safe_actor = safe_actor
         self.trigger_state = trigger_state
-        self.lambda_ = lambda_
+        self.omega = omega
 
     def check_safety(self, state):
         # In unsafe state, return False, otherwise True
         gap = self.trigger_state - np.sum(state)
-        prob = min(1,np.exp(-self.lambda_ * gap))  # probability of intervention
+        prob = min(1,np.exp(-self.omega * gap))  # probability of intervention
         if np.random.rand() < prob:
             return (False, prob)
         else:
@@ -319,7 +321,7 @@ class SafeAgent:
             interventioner: nn.Module,
             normalize_values: bool = False,
             gamma: float = 0.99,
-            lambda_: float = 0.95,
+            gae_lambda: float = 0.95,
             ppo: bool = False,
             ppo_clip_coef: float = 0.25,
             kl_coef: float = 0.0, # Beta in PPO paper
@@ -331,6 +333,8 @@ class SafeAgent:
             updates_per_rollout: int = 1,
             awac_lambda: float = 1.0,
             exp_adv_max: float = 100,
+            target_update_rate: float = 0.2,
+
 
 
             pretrain: bool = False,
@@ -348,10 +352,11 @@ class SafeAgent:
         self.normalize_values = normalize_values
         self.value_mean = None
         self.value_std = None
+        self.target_update_rate = target_update_rate
 
 
         self.gamma = gamma
-        self.lambda_ = lambda_
+        self.gae_lambda = gae_lambda
 
         self.ppo = ppo
         self.ppo_clip_coef = ppo_clip_coef
@@ -497,8 +502,12 @@ class SafeAgent:
             advantages = self.compute_GAE(rewards, values, next_value, batch["dones"]) # unnormalized advantages
             target = advantages + values # unnormalized target
             if self.normalize_values:
-                self.value_mean = target.mean().item()
-                self.value_std = target.std().item()
+                if self.value_mean is None:
+                    self.value_mean = target.mean().item()
+                    self.value_std = target.std().item()
+                else:
+                    self.value_mean = (1-self.target_update_rate)*self.value_mean +  self.target_update_rate*target.mean().item()
+                    self.value_std = (1-self.target_update_rate)*self.value_std + self.target_update_rate* target.std().item()
                 target = (target - self.value_mean) / max(self.value_std, 1e-8)  #normalized target
             return target
 
@@ -583,7 +592,8 @@ class SafeAgent:
         with torch.no_grad():
             clip_frac = ((ratio - 1.0).abs() > self.ppo_clip_coef).float().mean().item()
         if self.kl_coef == 0:
-            with torch.no_grad: approx_kl = -log_ratio.mean()
+            with torch.no_grad():
+                approx_kl = -log_ratio.mean()
         else:
             approx_kl = -log_ratio.mean()
         if self.kl_target is not None:
@@ -597,7 +607,7 @@ class SafeAgent:
         pg_loss1 = -advantages * ratio # unclipped loss
         pg_loss2 = -advantages * torch.clamp(ratio, 1.0 - self.ppo_clip_coef, 1.0 + self.ppo_clip_coef) # clipped loss
         kl_loss = self.kl_coef * approx_kl
-        entropy_loss = self.entropy_coef * result["entropy"] # fix this
+        entropy_loss = -self.entropy_coef * result["entropy"].mean() # fix this
         actor_loss = torch.max(pg_loss1, pg_loss2).mean() + kl_loss + entropy_loss
         if update:
             self.actor_optimizer.zero_grad()
@@ -643,7 +653,7 @@ class SafeAgent:
                 else:
                     next_value = values[t + 1]
                 delta = rewards[t] + self.gamma * next_value  - values[t]
-                adv[t] = last_gae_lam =  delta +  self.gamma * self.lambda_* last_gae_lam
+                adv[t] = last_gae_lam =  delta +  self.gamma * self.gae_lambda* last_gae_lam
         return adv
 
 
@@ -723,7 +733,7 @@ class SafeAgent:
 
 
 
-def compute_GAE(rewards, values, next_values, dones, gamma = 0.99, lambda_ = 0.95):
+def compute_GAE(rewards, values, next_values, dones, gamma = 0.99, gae_lambda = 0.95):
     # Need to fix this and make sure there are no dones...
     with torch.no_grad():
         adv = torch.zeros_like(rewards)
@@ -734,16 +744,9 @@ def compute_GAE(rewards, values, next_values, dones, gamma = 0.99, lambda_ = 0.9
             else:
                 next_val = values[t + 1]
             delta = rewards[t] + gamma  * next_val  - values[t]
-            adv[t] = last_gae_lambda = delta + gamma * lambda_ * last_gae_lambda
+            adv[t] = last_gae_lambda = delta + gamma * gae_lambda * last_gae_lambda
 
-        # deltas = rewards + gamma * next_values - values
-        # adv = torch.zeros_like(deltas)
-        #
-        # for t in reversed(range(len(deltas))):
-        #     if t == len(deltas) - 1:
-        #         adv[t] = deltas[t]
-        #     else:
-        #         adv[t] = deltas[t] +  gamma * lambda_* adv[t + 1]
+
     return adv
 
 
@@ -752,7 +755,7 @@ def GAE_test():
     values = torch.Tensor([4,5,6])
     next_values = torch.Tensor([5,6,7])
     dones = torch.Tensor([0,0,0])
-    adv = compute_GAE(rewards, values, next_values, dones, gamma = 1.0, lambda_ = 1.0)
+    adv = compute_GAE(rewards, values, next_values, dones, gamma = 1.0, gae_lambda = 1.0)
     return adv
 
 
