@@ -1,0 +1,22 @@
+---
+root_dir: ~
+seed: 5031997
+device: "cpu"
+deterministic_torch: true
+
+
+agent:
+  policy_name: "Backpressure"
+  modified: true
+
+
+env:
+    env_json_path: "/JSON/Environment/Env1/Env1a.json"
+    time_limit: 1000
+
+wandb:
+    project: "SB3"
+
+monitor:
+    filename: "backpressure"
+    info_keywords: ["backlog",]
