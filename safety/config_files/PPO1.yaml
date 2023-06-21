@@ -46,6 +46,7 @@ env:
       normalize_obs: false
       normalize_reward: false
       time_limit: 128
+      record_stats: true
 
 wandb:
     project: "SB3"
@@ -55,8 +56,9 @@ monitor:
     filename: "PPO"
     info_keywords: ["backlog",]
 
-learn:
+train:
   total_timesteps: 500000
+  reset_timesteps: 128
 
 eval:
   n_eval_episodes: 10

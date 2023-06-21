@@ -96,7 +96,32 @@ class StepLoggingWrapper(gym.Wrapper):
 
 
 
-def generate_env(config: Config, max_steps = 1000, monitor_settings = None, backpressure = False):
+def generate_env(config, max_steps = None):
+    """
+    Generates the environment and applies the appropriate wrappers
+    """
+    from Environments.MultiClassMultiHop import MultiClassMultiHop
+    parse_env_json(config.root_dir + config.env.env_json_path, config)
+    env = MultiClassMultiHop(config=config)
+    # required wrappers
+    env = FlatActionWrapper(env)
+    env = gym.wrappers.FlattenObservation(env)
+    env = gym.wrappers.ClipAction(env)
+
+    # optional wrappers
+    if max_steps is not None:
+        env = gym.wrappers.time_limit.TimeLimit(env, max_episode_steps=max_steps)
+    if config.env.wrappers.normalize_obs:
+        env = gym.wrappers.NormalizeObservation(env)
+    if config.env.wrappers.normalize_reward:
+        env = gym.wrappers.NormalizeReward(env)
+    if config.env.wrappers.record_stats:
+        env = gym.wrappers.RecordEpisodeStatistics(env)
+
+    return env
+
+
+def SB3_generate_env(config: Config, max_steps = 1000, monitor_settings = None, backpressure = False):
     """
     Generates the environment and applies the wrappers
     """
@@ -123,5 +148,7 @@ def generate_env(config: Config, max_steps = 1000, monitor_settings = None, back
             env = gym.wrappers.NormalizeReward(env)
     env = StepLoggingWrapper(env)
     return env
+
+
 
 

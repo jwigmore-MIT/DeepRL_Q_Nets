@@ -83,10 +83,6 @@ class MultiDiscreteActor(nn.Module):
         return torch.stack(samples)
 
 
-
-
-
-
 class BetaActor(nn.Module):
 
     def __init__(self, state_dim: int,
@@ -151,6 +147,7 @@ class BetaActor(nn.Module):
 
     def inv_scale_action(self, action: torch.Tensor) -> torch.Tensor:
         return ((action - self.action_space_low) / (self.action_space_high - self.action_space_low)).nan_to_num(0)
+
 class Actor(nn.Module):
     def __init__(
         self,
