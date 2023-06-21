@@ -96,25 +96,31 @@ class StepLoggingWrapper(gym.Wrapper):
 
 
 
-def generate_env(config: Config, monitor_settings = None, backpressure = False):
+def generate_env(config: Config, max_steps = 1000, monitor_settings = None, backpressure = False):
     """
     Generates the environment and applies the wrappers
     """
     from Environments.MultiClassMultiHop import MultiClassMultiHop
     parse_env_json(config.root_dir + config.env.env_json_path, config)
     env = MultiClassMultiHop(config=config)
-    env = gym.wrappers.time_limit.TimeLimit(env, max_episode_steps=100)
+    # required wrappers
+    env = FlatActionWrapper(env)
+    env = gym.wrappers.FlattenObservation(env)
+    env = gym.wrappers.ClipAction(env)
+    # optional wrappers
+
+    env = gym.wrappers.time_limit.TimeLimit(env, max_episode_steps=max_steps)
     env = gym.wrappers.RecordEpisodeStatistics(env)
 
     if monitor_settings is not None:
         monitor_settings["info_keywords"] = tuple(monitor_settings["info_keywords"])
         env = Monitor(env, **monitor_settings)
-    env = FlatActionWrapper(env)
-    env = gym.wrappers.FlattenObservation(env)
-    env = gym.wrappers.ClipAction(env)
+
     if not backpressure:
-        env = gym.wrappers.NormalizeObservation(env)
-        env = gym.wrappers.NormalizeReward(env)
+        if config.env.normalize_obs:
+            env = gym.wrappers.NormalizeObservation(env)
+        if config.env.normalize_reward:
+            env = gym.wrappers.NormalizeReward(env)
     env = StepLoggingWrapper(env)
     return env
 

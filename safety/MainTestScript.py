@@ -95,6 +95,7 @@ class WandBConfig:
 class LoggerConfig:
     include: List[str] =  field(default_factory=lambda: ["all"])
     type: str = "final" # "final", "all"
+
 @dataclass
 class Config:
     device: str = "cpu"

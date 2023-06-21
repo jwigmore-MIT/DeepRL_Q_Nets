@@ -10,33 +10,29 @@ tasks:
 save_models: true
 
 load:
-  zip_path: saved_models/PPO_Env1a_TRAIN_20230621-123803/best_model
+  zip_path: ~
 
 agent:
-  policy_name: PPO
+  policy_name: TD3
   policy: "MlpPolicy"
   kwargs:
-      learning_rate: 3.0e-04
-      n_steps: 128
-      batch_size: 64
-      n_epochs: 10
+      learning_rate: 1.0e-3
+      buffer_size: 1000000  # 1e6
+      learning_starts: 100
+      batch_size: 100
+      tau: 0.005
       gamma: 0.99
-      gae_lambda: 0.95
-      clip_range: 0.2
-      clip_range_vf: null
-      normalize_advantage: true
-      ent_coef: 0.0
-      vf_coef: 0.5
-      max_grad_norm: 0.5
-      use_sde: false
-      sde_sample_freq: -1
-      target_kl: null
-      stats_window_size: 100
-      tensorboard_log: "log_dir"
+      train_freq: !!python/tuple [ 1, "episode" ]
+      gradient_steps: -1
+      action_noise: null
+      replay_buffer_class: null
+      replay_buffer_kwargs: null
+      optimize_memory_usage: false
+      tensorboard_log: null
       policy_kwargs: null
       verbose: 0
       seed: null
-      device: "auto"
+      device: auto
       _init_setup_model: true
 
 env:
@@ -49,8 +45,9 @@ wandb:
     project: "SB3"
 
 
+
 monitor:
-    filename: "PPO"
+    filename: "TD3"
     info_keywords: ["backlog",]
 
 learn:

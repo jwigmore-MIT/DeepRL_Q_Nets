@@ -43,7 +43,7 @@ class MCMHBackPressurePolicy(nn.Module):
         return action
 
     def predict(self, observation, state=None, episode_start=None, deterministic=False):
-        return self._forward(observation), state
+        return [self._forward(observation)], state
 
 
     def _forward(self, state : dict, old_state = None):

@@ -1,6 +1,6 @@
 from SB3.config.base import Config, AgentConfig
 from Environments.MCMH_tools import generate_env
-from SB3.utils import generate_agent, TrainingWandbCallback, EvalWandbLogger
+from SB3.utils import generate_agent, load_agent, EvalWandbLogger
 from stable_baselines3.common.callbacks import CallbackList, EvalCallback
 from wandb.integration.sb3 import WandbCallback
 from stable_baselines3 import PPO
@@ -50,16 +50,15 @@ env = generate_env(config, monitor_settings = config.monitor.toDict(), backpress
 
 
 
-# === Learning Agent Generation === #
-agent = generate_agent(config, env)
-PPO.load(config.load.zip_path)
+# === Loading Agent Generation === #
+agent = load_agent(config, env)
 
 
 # === Logger Initialization === #
 run = wandb.init(
         project= config.wandb.project,
         config= vars(config),
-        sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
+        sync_tensorboard=False,  # auto-upload sb3's tensorboard metrics
         name= config.run_name,
     )
 
@@ -67,10 +66,10 @@ run = wandb.init(
 
 
 # === Testing === #
-eval_env = generate_env(config, monitor_settings = {"filename": "trained", "info_keywords": ("backlog",)})
+eval_env = generate_env(config, max_steps = config.env.time_limit, monitor_settings = config.monitor.toDict(), backpressure = config.BP)
 EvalWandbLogger = EvalWandbLogger()
 mean_reward, std_reward = evaluate_policy(agent, eval_env, callback = EvalWandbLogger._on_step, **config.eval.toDict())
-
+EvalWandbLogger.write_log()
 
 
 wandb.finish()

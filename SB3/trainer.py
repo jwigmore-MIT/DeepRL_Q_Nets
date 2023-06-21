@@ -1,4 +1,6 @@
-from SB3.config.base import Config, AgentConfig
+#from SB3.config.base import Config, AgentConfig
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 from Environments.MCMH_tools import generate_env
 from SB3.utils import generate_agent, TrainingWandbCallback, EvalWandbLogger
 from stable_baselines3.common.callbacks import CallbackList, EvalCallback
@@ -7,13 +9,14 @@ from wandb.integration.sb3 import WandbCallback
 import pyrallis
 import wandb
 import yaml
-import os
+
+
 from collections import namedtuple
 from munch import Munch
 from stable_baselines3.common.evaluation import evaluate_policy
 from datetime import datetime
 
-def parse_config(config_file_name: str) -> Config:
+def parse_config(config_file_name: str):
     """
     Parses the config file
     """
@@ -38,14 +41,13 @@ def parse_config(config_file_name: str) -> Config:
     return config
 
 # === Config === #
-config_file_name = "PPO1.yaml"
+config_file_name = "TD3.yaml"
 config = parse_config(config_file_name)
 
 
 
-
 # === Environment Generation === #
-env = generate_env(config, monitor_settings = config.monitor.toDict(), backpressure = config.BP)
+env = generate_env(config, max_steps=config.env.time_limit, monitor_settings = config.monitor.toDict(), backpressure = config.BP)
 
 
 
@@ -58,7 +60,7 @@ agent = generate_agent(config, env)
 run = wandb.init(
         project= config.wandb.project,
         config= vars(config),
-        sync_tensorboard=False,  # auto-upload sb3's tensorboard metrics
+        sync_tensorboard= True,  # auto-upload sb3's tensorboard metrics
         name= config.run_name,
     )
 
@@ -74,10 +76,11 @@ if "train" in config.tasks:
 
 
 # # === Testing === #
-# eval_env = generate_env(config, monitor_settings = {"filename": "trained", "info_keywords": ("backlog",)})
-# mean_reward, std_reward = evaluate_policy(agent, eval_env, callback = EvalWandbCallback, **config.eval.toDict())
-#
-
+if "test" in config.tasks:
+    eval_env = generate_env(config, monitor_settings = {"filename": "trained", "info_keywords": ("backlog",)})
+    EvalWandbLogger = EvalWandbLogger()
+    mean_reward, std_reward = evaluate_policy(agent, eval_env, callback = EvalWandbLogger._on_step, **config.eval.toDict())
+    EvalWandbLogger.write_log()
 
 wandb.finish()
 
