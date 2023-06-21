@@ -1,6 +1,6 @@
 from SB3.config.base import Config, AgentConfig
 from Environments.MCMH_tools import generate_env
-from SB3.utils import generate_agent, TrainingWandbCallback, EvalWandbCallback
+from SB3.utils import generate_agent, TrainingWandbCallback, EvalWandbLogger
 from stable_baselines3.common.callbacks import CallbackList, EvalCallback
 from wandb.integration.sb3 import WandbCallback
 
@@ -58,7 +58,7 @@ agent = generate_agent(config, env)
 run = wandb.init(
         project= config.wandb.project,
         config= vars(config),
-        sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
+        sync_tensorboard=False,  # auto-upload sb3's tensorboard metrics
         name= config.run_name,
     )
 

@@ -1,6 +1,6 @@
 from SB3.config.base import Config, AgentConfig
 from Environments.MCMH_tools import generate_env
-from SB3.utils import generate_agent, TrainingWandbCallback, EvalWandbCallback
+from SB3.utils import generate_agent, TrainingWandbCallback, EvalWandbLogger
 from stable_baselines3.common.callbacks import CallbackList, EvalCallback
 from wandb.integration.sb3 import WandbCallback
 from stable_baselines3 import PPO
@@ -68,8 +68,8 @@ run = wandb.init(
 
 # === Testing === #
 eval_env = generate_env(config, monitor_settings = {"filename": "trained", "info_keywords": ("backlog",)})
-eval_callback = EvalWandbCallback()
-mean_reward, std_reward = evaluate_policy(agent, eval_env, callback = eval_callback._on_step, **config.eval.toDict())
+EvalWandbLogger = EvalWandbLogger()
+mean_reward, std_reward = evaluate_policy(agent, eval_env, callback = EvalWandbLogger._on_step, **config.eval.toDict())
 
 
 

@@ -5,6 +5,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 from wandb.integration.sb3 import WandbCallback
 import wandb
 import os
+from copy import deepcopy
 
 
 
@@ -83,7 +84,7 @@ class CustomEvalCallback(BaseCallback):
 
 
 
-class EvalWandbCallback(BaseCallback):
+class EvalWandbLogger(BaseCallback):
     """
     Custom callback for plotting additional values in wandb while evaluating an agent
     """
@@ -94,19 +95,31 @@ class EvalWandbCallback(BaseCallback):
         self.sum_backlog = 0
         self.rollout_steps = 0
         self.n = 0
-        self.logger = {}
+        self.logger = {self.n: []}
+
+    def next_env(self):
+        self.sum_backlog= 0
+        self.rollout_steps = 0
+        self.n +=1
+        self.logger[self.n] = []
+
     def _on_step(self, locals, globals) -> bool:
         self.sum_backlog += sum(locals["infos"][i]["backlog"] for i in range(len(locals["infos"])))/ len(locals["infos"])
         self.rollout_steps += 1
-        wandb.log({f"eval/lta_backlog[{self.n}]": self.sum_backlog / self.rollout_steps,
-                  "eval_steps": self.rollout_steps})
+        self.logger[self.n].append(deepcopy(self.sum_backlog / self.rollout_steps))
+
         if locals["done"]:
-            self.sum_backlog = 0
-            self.rollout_steps = 0
-            self.n += 1
+            self.next_env()
 
-
-
+    def write_log(self):
+        all_data = []
+        keys = []
+        for n,data in self.logger.items():
+            all_data.append(data)
+            keys.append("env_" + str(n))
+        x = list(range(len(all_data[0])))
+        wandb.log({"eval/lta_backlog": wandb.plot_line_series(xs = x, ys = all_data,
+                                                                keys = keys, title = "Test LTA Backlog")})
 
 
 
