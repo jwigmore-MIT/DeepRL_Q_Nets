@@ -31,7 +31,7 @@ from safety.agents.normalizers import Normalizer, CriticTargetScaler
 if __name__ == "__main__":
 
     # === Init Config === #
-    config_file = "BP_Test1.yaml"
+    config_file = "Backpressure/BP_Test1.yaml"
     config = parse_config(config_file, run_type="TEST")
 
     # === Init Environment === #

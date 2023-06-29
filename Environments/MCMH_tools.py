@@ -278,7 +278,7 @@ class Graph():
         # node is added at the beginning. The first
         # element of the node has the destination
         # and the second elements has the weight
-        newNode = [dest, weight]
+        newNode = [dest, 1]
         self.graph[src].insert(0, newNode)
 
 

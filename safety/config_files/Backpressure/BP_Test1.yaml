@@ -1,0 +1,38 @@
+---
+config:
+root_dir: ~
+seed: 5031997
+device: "cpu"
+deterministic_torch: true
+tasks:
+  - "test"
+save_models: False
+
+
+
+agent:
+  policy_name: BPM
+  policy: BPM
+  safe_agent: false
+
+
+env:
+    env_json_path: "/JSON/Environment/TwoTriangle1.json"
+    wrappers:
+      normalize_obs: false
+      normalize_reward: false
+      record_stats: true
+
+wandb:
+    project: "Debug"
+    group: "Environment+Backpressure"
+
+
+eval:
+  n_eval_episodes: 10
+  deterministic: true
+
+
+
+
+

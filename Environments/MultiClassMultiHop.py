@@ -44,10 +44,17 @@ class MultiClassMultiHop(gym.Env):
         self.name = net_para.get('name',None)
         self.t = 0
 
+
+
         # topology information
         self.nodes = eval(net_para['nodes'])  # nodes <list>
         self.links = [tuple(link) for link in eval(net_para['links'])] # observable links <list> of <tup>
+        self.bidirectional = net_para.get('bidirectional', False)
+        if self.bidirectional:
+            for link in deepcopy(self.links):
+                self.links.append((link[1], link[0]))
 
+        # capacities
         self.capacities_fcn = self._extract_capacities(net_para['capacities'])
         self.Cap = None
         self._sim_capacities()
@@ -60,7 +67,7 @@ class MultiClassMultiHop(gym.Env):
 
 
         # classes
-        self.classes = self._extract_classes(net_para['classes'])
+        self.classes, self.destinations = self._extract_classes(net_para['classes'])
         #net_para['classes']  # [(k,s_k, d_k, [a_k, p_k])]
         self.K = len(self.classes)
 
@@ -281,22 +288,30 @@ class MultiClassMultiHop(gym.Env):
             probability = cap_dict['(0,0)']['probability']
             for link in self.links:
                 caps[link] = bern_rv(num=capacity, prob = probability)
-        else:
-            for link, l_info in cap_dict.items():
-                if isinstance(link, str):
-                    link = eval(link)
-                rv = bern_rv(num = l_info['capacity'], prob= l_info['probability'])
-                caps[link] = rv
+
+        for link, l_info in cap_dict.items():
+            if isinstance(link, str):
+                link = eval(link)
+            if link == '(0,0)':
+                continue
+            rv = bern_rv(num = l_info['capacity'], prob= l_info['probability'])
+            caps[link] = rv
+            if self.bidirectional: # add reverse link
+                caps[link[::-1]] = deepcopy(rv)
+
+
+
 
         return caps
 
     def _extract_classes(self, class_dict):
         classes = {}
+        destinations = {}
         for cls_num, cls_info in class_dict.items():
             rv = bern_rv(num = cls_info['arrival'], prob = cls_info['probability'])
             classes[int(cls_num)] = [cls_info['source'], cls_info['destination'], rv]
-
-        return classes
+            destinations[cls_num] = cls_info['destination']
+        return classes, destinations
     # internal dynamics
     def _sim_capacities(self):
         self.Cap = {key: value.sample() for key, value in self.capacities_fcn.items()}
@@ -365,6 +380,12 @@ class MultiClassMultiHop(gym.Env):
 
     def get_links(self):
         return deepcopy(self.links)
+
+    def get_distances(self):
+        return deepcopy(self.dist)
+
+    def get_destinations(self):
+        return deepcopy(self.destinations)
 
     # Flattening
     def flatten_obs_space(self):
