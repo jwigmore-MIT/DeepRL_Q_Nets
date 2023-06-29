@@ -47,9 +47,16 @@ class MultiClassMultiHop(gym.Env):
         # topology information
         self.nodes = eval(net_para['nodes'])  # nodes <list>
         self.links = [tuple(link) for link in eval(net_para['links'])] # observable links <list> of <tup>
-        self.graph = self._make_graph()
-        self.reachable_nodes = self.create_reachable()
+
         self.capacities_fcn = self._extract_capacities(net_para['capacities'])
+        self.Cap = None
+        self._sim_capacities()
+
+        #self.graph, self.weighted_graph = self._make_graph()
+        self.graph = self.make_graph()
+        self.compute_shortest_paths()
+
+        self.reachable_nodes = self.compute_reachable()
 
 
         # classes
@@ -76,8 +83,7 @@ class MultiClassMultiHop(gym.Env):
                     self.nodes}  # Counter for all arrivals: {(s_k, d_k): a_k(t)}
         self.Q = {node: {c: 0 for c in self.classes.keys()} for node in
                   self.nodes}  # Buffers for all nodes Q_i^k = Q[i][k]
-        self.Cap = None
-        self._sim_capacities()
+
 
         # actions
         self.f = {link: {c: 0 for c in self.classes.keys()} for link in
@@ -122,13 +128,41 @@ class MultiClassMultiHop(gym.Env):
 
     def _make_graph(self):
         graph = {}
+        weighted_graph = {}
         for node in self.nodes:
             graph[node] = []
+            weighted_graph[node] = []
 
         for link in self.links:
             graph[link[0]].append(link[1])
+            weighted_graph[link[0]].append((link[1],self.Cap[link]))
+        return graph, weighted_graph
 
+    def make_graph(self):
+        # Number of nodes
+        n = len(self.nodes)
+        graph = Graph(n)
+        for link in self.links:
+            graph.addEdge(link[0]-1, link[1]-1, self.Cap[link])
         return graph
+
+    def compute_shortest_paths(self):
+        self.dist = {}
+        for node in self.nodes:
+            dist = self.graph.dijkstra(node-1)
+            for dest in self.nodes:
+                self.dist[node, dest] = dist[dest-1]
+
+
+    def compute_reachable(self):
+        reachable_nodes = {}
+        for node in self.nodes:
+            reachable_nodes[node] = []
+            for dest in self.nodes:
+                if self.dist[node, dest] < np.inf and node != dest:
+                    reachable_nodes[node].append(dest)
+        return reachable_nodes
+
 
     def compute_reachable_nodes(self, start_node):
         def traverse(node, visited: set):
@@ -145,6 +179,8 @@ class MultiClassMultiHop(gym.Env):
         for node in self.nodes:
             reachable_nodes[node] = self.compute_reachable_nodes(node)
         return reachable_nodes
+
+
 
 
     """
@@ -164,10 +200,19 @@ class MultiClassMultiHop(gym.Env):
             max_action[link] = {}
             for cls, value in class_dict.items():
                 cls_dest = self.classes[cls][1]
-                if cls_dest not in j_reach:
-                    max_action[link][cls] = 0
-                else:
+                if cls_dest in j_reach:
                     max_action[link][cls] = self.capacities_fcn[link].num
+                elif cls_dest == j:
+                    max_action[link][cls] = self.capacities_fcn[link].num
+                else:
+                    max_action[link][cls] = 0
+
+                # if cls_dest not in j_reach:
+                #     max_action[link][cls] = 0
+                # elif cls_dest == j:
+                #     max_action[link][cls] = self.capacities_fcn[link].num
+                # else:
+                #     max_action[link][cls] = self.capacities_fcn[link].num
         return max_action
 
 

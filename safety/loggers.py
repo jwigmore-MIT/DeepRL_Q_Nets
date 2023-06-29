@@ -1,6 +1,7 @@
 import wandb
 import numpy as np
 
+
 def log_rollouts(rollout, history = None,  policy_name = "policy", glob = "test", include = ["all"], log_vectors = False):
 
     # Per time step logging
@@ -53,13 +54,39 @@ def log_rollouts(rollout, history = None,  policy_name = "policy", glob = "test"
 
     return history, rollout["LTA_Rewards"][-1]
 
-def log_rollout_summary(rollout, eps, glob = "rollout_summary"):
+
+def log_rollout_summary(rollout, eps = 0, glob = "test"):
+
+    log = {}
+    # What do we want to log in a rollout?
+    # 1. Backlog distribution over the entire rollout
+    # log["backlog_dist_mean"] = rollout["backlogs"].mean(axis = 0)
+    # log["backlog_dist_std"] = rollout["backlogs"].std(axis = 0)
+
+    # 2. LTA_backlog
+    LTA_backlog, LTA_Error = get_reward_stats(np.array(rollout["backlogs"]).reshape(-1,1))
+    log["LTA_backlog"] = LTA_backlog[-1]
+
+    # 3. State distribution
+    # log["state_dist_mean"] = rollout["obs"].mean(axis = 0)
+    # log["state_dist_std"] = rollout["obs"].std(axis = 0)
+
+    # 4. Action distribution statistics
+    # log["action_dist_mean"] = rollout["actions"].mean(axis = 0)
+    # log["action_dist_std"] = rollout["actions"].std(axis = 0)
+
+
+    #5. Simple means
+    log["mean_reward"] = np.mean(rollout["rewards"])
+    log["mean_backlog"] = np.mean(rollout["backlogs"])
+    log["intervention_rate"] = np.mean(rollout["interventions"])
+
     log_dict = {}
-    log_dict[f"{glob}/mean_reward"] = np.mean(rollout["rewards"])
-    log_dict[f"{glob}/intervention_rate"] = np.mean(rollout["interventions"])
-    log_dict[f"{glob}/mean_backlog"] = np.mean(rollout["backlogs"])
-    log_dict[f"{glob}/eps"] = eps
+    for key in log.keys():
+        log_dict[f"{glob}/{key}"] = log[key]
+    log_dict[f"{glob}/rollout"] = eps
     wandb.log(log_dict)
+    return log["LTA_backlog"]
 
 
 
@@ -103,7 +130,9 @@ def log_offline_metrics(metrics):
 def log_update_metrics(metrics, eps = None, type = "all", glob = "update"):
     # type can be "all" or "final", refers to logging metrics from all epochs
     # or just the final epoch
-    if type == "all":
+    if isinstance(type, str):
+        type = [type]
+    if "all" in type:
         for key in metrics.keys():
             if len(metrics[key]) == 0:
                 continue
@@ -119,7 +148,20 @@ def log_update_metrics(metrics, eps = None, type = "all", glob = "update"):
             log_dict[f"{glob}/{key}-min"] = np.min(metrics[key])
         if eps is not None:
             log_dict.update({f"{glob}/eps": eps})
-    if type == "final":
+    if "mean" in type:
+        for key in metrics.keys():
+            if len(metrics[key]) == 0:
+                continue
+            wandb.define_metric(f"{glob}/{key}-mean", summary = "mean")
+        log_dict = {}
+        for key in metrics.keys():
+            if len(metrics[key]) == 0:
+                continue
+            log_dict[f"{glob}/{key}-mean"] = np.mean(metrics[key])
+        if eps is not None:
+            log_dict.update({f"{glob}/eps": eps})
+
+    if "final" in type:
         for key in metrics.keys():
             if len(metrics[key]) == 0:
                 continue
@@ -132,5 +174,16 @@ def log_update_metrics(metrics, eps = None, type = "all", glob = "update"):
         if eps is not None:
             log_dict.update({f"{glob}/eps": eps})
 
-    wandb.log(log_dict)
+    if "minibatches" in type:
+        for key in metrics.keys():
+            if len(metrics[key]) == 0:
+                continue
+            wandb.define_metric(f"{glob}/{key}")
+        n_mbs = len(metrics["critic_loss"])
+        mb_init_step = n_mbs*eps
+        for i in range(n_mbs):
+            log_dict = {f"{glob}/mb": mb_init_step + i}
+            for key in metrics.keys():
+                log_dict[f"{glob}/{key}"] = metrics[key][i]
+            wandb.log(log_dict)
 

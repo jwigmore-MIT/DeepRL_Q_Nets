@@ -12,3 +12,13 @@ env = generate_env(config, max_steps = config.train.reset_steps)
 # === Agent === #
 
 
+
+""" TODO:
+- Add a "Normalizer" class that normalizes the observations for the agent
+    - Environment should output unnormalized observations but the agent should pre-process them using the Normalizer
+    - Actors and critics used processed observations (and values?)
+    
+    
+    
+"""
+

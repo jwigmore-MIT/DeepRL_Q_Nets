@@ -1,0 +1,42 @@
+---
+config:
+root_dir: ~
+seed: 5031997
+device: "cpu"
+deterministic_torch: true
+tasks:
+  - "test"
+save_models: False
+
+load:
+  zip_path: saved_models/PPO_Env1a_TRAIN_20230621-123803/best_model
+
+
+
+agent:
+  policy_name: BPM
+  policy: BPM
+  safe_agent: false
+
+
+env:
+    env_json_path: "/JSON/Environment/Env1/Env1b.json"
+    wrappers:
+      normalize_obs: false
+      normalize_reward: false
+      time_limit: 2000
+      record_stats: true
+
+wandb:
+    project: "Debug"
+    group: "Safety-Testing"
+
+
+eval:
+  n_eval_episodes: 10
+  deterministic: true
+
+
+
+
+

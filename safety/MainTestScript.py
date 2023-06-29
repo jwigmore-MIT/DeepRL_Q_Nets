@@ -190,7 +190,7 @@ if __name__ == "__main__":
     set_seed(config.seed, env, config.deterministic_torch)
 
     # init buffer
-    buffer = Buffer(config.env.flat_state_dim, config.env.flat_action_dim, config.buffer_size, config.iaopg.norm_states, config.device)
+    buffer = Buffer(config.env.flat_state_dim, config.env.flat_action_dim, config.buffer.size, config.iaopg.norm_states, config.device)
 
 
     actor = MultiDiscreteActor(config.env.flat_state_dim, config.agent.actor_hidden_dim, action_ranges)

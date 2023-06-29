@@ -381,9 +381,9 @@ class SafeAWACAgent:
             loss = (-action_log_prob * weights).mean()
         else: # PPO Loss
             with torch.no_grad():
-                clip_frac = ((ratio - 1.0).abs() > self.ppo_clip_coef).float().mean().item()
+                clip_frac = ((ratio - 1.0).abs() > self.clip_coef).float().mean().item()
             pg_loss1 = -adv_gae * ratio
-            pg_loss2 = -adv_gae * torch.clamp(ratio, 1.0 - self.ppo_clip_coef, 1.0 + self.ppo_clip_coef)
+            pg_loss2 = -adv_gae * torch.clamp(ratio, 1.0 - self.clip_coef, 1.0 + self.clip_coef)
             loss = torch.max(pg_loss1, pg_loss2).mean()
         results = {
             "actor_loss": loss,

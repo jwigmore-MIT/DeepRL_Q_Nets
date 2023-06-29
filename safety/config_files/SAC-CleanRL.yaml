@@ -1,0 +1,31 @@
+---
+root_dir: ~
+exp_name: "CleanRL_SAC"
+seed: 5031997
+torch_deterministic: true
+cuda: false
+track: true
+wandb_project_name: "Debug"
+wandb_entity: ~
+capture_video: false
+total_timesteps: 1000000
+buffer_size: 1000000
+gamma: 0.99
+tau: 0.005
+batch_size: 256
+learning_starts: 5000
+policy_lr: 0.0003
+q_lr: 0.0003
+policy_frequency: 2
+target_network_frequency: 1
+noise_clip: 0.5
+alpha: 0.2
+autotune: true
+num_envs: 1
+env:
+  env_json_path: "/JSON/Environment/Env1/Env1b.json"
+  wrappers:
+    normalize_obs: false
+    normalize_reward: true
+    record_stats: true
+  max_steps: 250

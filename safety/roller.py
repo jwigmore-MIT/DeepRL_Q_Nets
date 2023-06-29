@@ -4,13 +4,15 @@ from tqdm import tqdm
 import wandb
 import pandas as pd
 
-def gen_rollout(env, agent, length = 1000, device = "cpu", pbar_desc = "Generating Rollout", frac = "", show_progress = True, safe_agent = True):
+def gen_rollout(env, agent, length = 1000, device = "cpu", pbar_desc = "Generating Rollout", frac = "", show_progress = True, reset = True):
 
     # Initialize temporary storage
     obs = np.zeros([length, env.observation_space.shape[0]])
     state = np.zeros([length, env.observation_space.shape[0]])
     next_obs = np.zeros([length, env.observation_space.shape[0]])
     next_state = np.zeros([length, env.observation_space.shape[0]])
+    nn_obs = np.zeros([length, env.observation_space.shape[0]]) # actor/critic observation i.e. post normalization
+    next_nn_obs = np.zeros([length, env.observation_space.shape[0]])
     rewards = np.zeros([length, 1])
     terminals = np.zeros([length, 1])
     interventions = np.zeros([length, 1])
@@ -20,14 +22,11 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", pbar_desc = "Generati
     actions = np.zeros([length, env.action_space.shape[0]])
     flows = np.zeros([length, env.action_space.shape[0]])
     arrivals = np.zeros([length, env.flat_qspace_size])
-    normalized = False
+
 
     # Get the current state of the environment
     next_ob = env.get_f_state()
     # check if NormalizeObservation wrapper is used
-    if hasattr(env, "obs_rms"):
-        next_ob = env.normalize(next_ob)
-        normalized = True
 
     if show_progress:
         pbar = tqdm(range(length), desc=f"{pbar_desc} {frac}")
@@ -37,16 +36,34 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", pbar_desc = "Generati
     # Perform Rollout
     for t in pbar:
         obs[t] = next_ob
-        if normalized:
-            actions[t], interventions[t], intervention_prob[t]  = agent.act(obs[t], device, env.get_f_state())
+
+        """ Should look something like this for the PPO agent
+        action, actor_obs = agent.act(obs[t], device) # where actor_obs is normalized if using a normalization agent
+    
+        """
+        if hasattr(agent,"safe_agent") and agent.safe_agent:
+            actions[t], nn_obs[t], interventions[t], intervention_prob[t] = agent.act(obs[t], device)
+        elif agent.__str__() == "SafeAgent()":
+            actions[t], nn_obs[t], interventions[t], intervention_prob[t] = agent.act(obs[t], device)
+            next_obs[t], rewards[t], terminals[t], timeouts[t], info = env.step(actions[t])
+            next_nn_obs[t] = agent.obs_normalizer.normalize(next_obs[t], update=True)
+
+        elif agent.__str__() == 'MCMHBackPressurePolicy()':
+            # BP Agent
+            actions[t] = agent.act(obs[t], device)
+            interventions[t] = True
+            intervention_prob[t] = 1
+            next_obs[t], rewards[t], terminals[t], timeouts[t], info = env.step(actions[t])
         else:
-            if safe_agent:
-                actions[t], interventions[t], intervention_prob[t] = agent.act(obs[t], device)
-            else:
-                actions[t] = agent.act(obs[t], device)
-                interventions[t] = True
-                intervention_prob[t] = 1
-        next_obs[t], rewards[t], terminals[t], timeouts[t], info = env.step(actions[t])
+            # NN Agent
+            actions[t], nn_obs[t] = agent.act(obs[t], device)
+            interventions[t] = False
+            intervention_prob[t] = 0
+            next_obs[t], rewards[t], terminals[t], timeouts[t], info = env.step(actions[t])
+            next_nn_obs[t] = agent.obs_normalizer.normalize(next_obs[t], update=True)
+
+
+
         if "final_info" in info:
             # info won't contain flows nor arrivals
             pass
@@ -57,14 +74,69 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", pbar_desc = "Generati
             state[t] = info['state'][-1]
             next_state[t] = info['next_state'][-1]
         next_ob = next_obs[t]
-    #terminals[t] = 1
+
+    if reset:
+        env.reset()
+        terminals[t] = 1
     return {
         "obs": obs,
+        "nn_obs": nn_obs,
         "actions": actions,
         "rewards": rewards,
         "terminals": terminals,
         "timeouts": timeouts,
         "next_obs": next_obs,
+        "next_nn_obs": next_nn_obs,
+        "flows": flows,
+        "arrivals": arrivals,
+        "interventions": interventions,
+        "intervention_prob": intervention_prob,
+        "backlogs": backlogs,
+        "state": state,
+        "next_state": next_state
+    }
+
+def gen_step(env, agent, random = False, device = "cpu"):
+
+    obs = env.get_f_state()
+    if random:
+        actions = env.action_space.sample()
+        nn_obs = agent.obs_normalizer.normalize(obs, update=True)
+        interventions = False
+        intervention_prob = 0
+        next_obs, rewards, terminals, timeouts, info = env.step(actions)
+        next_nn_obs = agent.obs_normalizer.normalize(next_obs, update=True)
+
+    elif agent.__str__() == "SafeAgent()":
+        actions, nn_obs, interventions, intervention_prob = agent.act(obs, device)
+        next_obs, rewards, terminals, timeouts, info = env.step(actions)
+        next_nn_obs = agent.obs_normalizer.normalize(next_obs, update=True)
+    else:
+        actions, nn_obs = agent.act(obs, device)
+        interventions = False
+        intervention_prob = 0
+        next_obs, rewards, terminals, timeouts, info = env.step(actions)
+        next_nn_obs = agent.obs_normalizer.normalize(next_obs, update=True)
+    if "final_info" in info:
+        # info won't contain flows nor arrivals
+        pass
+    else:
+        flows = info['flows'][-1]
+        arrivals = info['arrivals'][-1]
+        backlogs = info['backlog'][-1]
+        state = info['state'][-1]
+        next_state = info['next_state'][-1]
+
+
+    return {
+        "obs": obs,
+        "nn_obs": nn_obs,
+        "actions": actions,
+        "rewards": rewards,
+        "terminals": terminals,
+        "timeouts": timeouts,
+        "next_obs": next_obs,
+        "next_nn_obs": next_nn_obs,
         "flows": flows,
         "arrivals": arrivals,
         "interventions": interventions,
