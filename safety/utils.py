@@ -50,7 +50,7 @@ def parse_config(config_file_name: str, run_type = "TRAIN"):
     config.root_dir = os.path.dirname(working_dir)
 
     # check if the policy is backpressure
-    config.BP = True if config.agent.policy_name.__contains__("Backpressure") else False
+    config.BP = True if config.agent.policy_name.__contains__("BP") else False
 
     # check to save models
     if config.save_models and run_type == "TRAIN":

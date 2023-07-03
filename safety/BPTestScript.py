@@ -31,14 +31,14 @@ from safety.agents.normalizers import Normalizer, CriticTargetScaler
 if __name__ == "__main__":
 
     # === Init Config === #
-    config_file = "Backpressure/BP_Test1.yaml"
+    config_file = "Backpressure/BPR_Test1.yaml"
     config = parse_config(config_file, run_type="TEST")
 
     # === Init Environment === #
     env = generate_env(config)
 
     # ===Load Agent ===#
-    agent = MCMHBackPressurePolicy(env, M = True)
+    agent = MCMHBackPressurePolicy(env, **config.agent.BP_args.toDict())
 
     # init wandb
     wandb_init(config)

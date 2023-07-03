@@ -16,7 +16,8 @@ def wandb_init(config) -> None:
         group=config.wandb.group,
         name=config.run_name,
         id=str(uuid.uuid4()),
-        tags=tags
+        tags=tags,
+        tensorboard=True,
     )
     return run
 

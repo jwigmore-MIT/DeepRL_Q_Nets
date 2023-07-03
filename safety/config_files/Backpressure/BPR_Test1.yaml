@@ -11,9 +11,12 @@ save_models: False
 
 
 agent:
-  policy_name: BPM
-  policy: BPM
+  policy_name: BP-R
+  policy: BP-R
   safe_agent: false
+  BP_args:
+    M: "R"
+
 
 
 env:
@@ -24,8 +27,9 @@ env:
       record_stats: true
 
 wandb:
-    project: "Debug"
+    project: "Debug2"
     group: "Environment+Backpressure"
+
 
 
 eval:

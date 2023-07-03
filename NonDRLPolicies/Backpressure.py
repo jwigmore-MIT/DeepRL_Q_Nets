@@ -11,7 +11,7 @@ from torch import nn
 class MCMHBackPressurePolicy(nn.Module):
 
     # initialization
-    def __init__(self, env, M = False, map_to_discrete = False, tianshou = False, rescale = None):
+    def __init__(self, env, M = False, d_scale = None):
         super(MCMHBackPressurePolicy, self).__init__()
         # check if env has attribute unwrapped
         if hasattr(env, 'unwrapped'):
@@ -20,19 +20,25 @@ class MCMHBackPressurePolicy(nn.Module):
             self.env = deepcopy(env)
         self.links = env.get_links()
         self.action_format = env.get_action_format()
-        self.modified = M
+        if M not in [False, "R", "SP"]: #R: reachability, SP: shortest path
+            raise ValueError("M must be False, 'R', or 'SP'")
+        else:
+            self.modified = M
+        if self.modified == "SP" and d_scale is None:
+            raise ValueError("Must provide d_scale when using shortest path")
+        else:
+            self.d_scale = d_scale
         self.max_action = env.max_actions
-        self.map_to_discrete = map_to_discrete
+        # self.map_to_discrete = map_to_discrete
         self.mu = {} # transmission variable for each link (i.e. total flow)
         for link in self.links:
             self.mu[link] = pulp.LpVariable('mu' + '_' + str(link[0]) + '_' + str(link[1]), lowBound=0, cat='Integer')
         # initialize the solver
         self.solver = pulp.PULP_CBC_CMD(msg=False)
-        self.tianshou = tianshou
-        if rescale is not None:
-            self.rescale = rescale
-        else:
-            self.rescale = None
+        self.dist = env.get_distances()
+        self.destinations = env.get_destinations()
+
+
 
 
     def forward(self, state : dict, old_state = None):
@@ -58,12 +64,12 @@ class MCMHBackPressurePolicy(nn.Module):
         for link in self.links:
             val = pulp.value(self.mu[link])
             f[link][opt_ij[link][0]] = int(val) if val != None else 0
-        if self.map_to_discrete:
-            f = self.get_action_key(f)
-        else: # need to convert keys to strings for batching
-            f = self.env.flatten_action(f)
-        result = {'act': f,
-                  'state': None}
+        # if self.map_to_discrete:
+        #     f = self.get_action_key(f)
+        # else: # need to convert keys to strings for batching
+        f = self.env.flatten_action(f)
+        # result = {'act': f,
+        #           'state': None}
 
         return f[0,:]
 
@@ -102,6 +108,8 @@ class MCMHBackPressurePolicy(nn.Module):
         opt_ij = {}  # (i,j): (number of optimal class for (i,j) :  weight (W_ij))
         Q_c = deepcopy(Q) #Want to work with a modifiable copy so we account for decisions that will be made prior
         for link, cap in Cap.items():
+            if link == (0,0):
+                continue
             #link = self.str_to_tup_str(link)
             #Q_i = Q[str(link[0])]  # dict
             #Q_j = Q[str(link[1])]  # dict
@@ -109,8 +117,12 @@ class MCMHBackPressurePolicy(nn.Module):
             Q_j = Q_c[link[1]]
             diff = {}
             for cls, amt in Q_i.items():
-                diff[cls] = Q_i[cls] - Q_j[cls]
-                if self.modified and self.max_action[link][cls] == 0:
+                if self.modified != "SP":
+                    diff[cls] = Q_i[cls] - Q_j[cls]
+                else:
+                    diff[cls] = (Q_i[cls] + self.d_scale * self.dist[link[0], self.destinations[cls]]) - (
+                                Q_j[cls] + self.d_scale * self.dist[link[1], self.destinations[cls]])
+                if self.modified == "R" and self.max_action[link][cls] == 0:
                     diff[cls] = -np.inf
             opt_cls = max(diff, key=diff.get)  # optimal class
             #opt_ij[self.tup_str_to_tup_int(link)] = (opt_cls, max(diff[opt_cls], 0))

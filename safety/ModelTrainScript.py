@@ -23,6 +23,7 @@ from Environments.MCMH_tools import generate_env
 from safety.agents.actors import init_actor
 from safety.agents.critics import Critic
 from safety.agents.ppo_agent import PPOAgent
+from safety.agents.lta_ppo_agent import LTAPPOAgent
 from safety.agents.normalizers import Normalizer, CriticTargetScaler
 from safety.agents.safe_agents import init_safe_agent
 
@@ -31,8 +32,9 @@ from safety.agents.safe_agents import init_safe_agent
 if __name__ == "__main__":
 
     # === Init Config === #
-    config_file = "PPO-Gaussian-Env2a.yaml"
+    #config_file = "PPO-Gaussian-Env1b.yaml"
     config_file = "SafePPO-Gaussian-Env1b.yaml"
+    config_file = "SafeLTAPPO-Gaussian-Env1b.yaml"
     config = parse_config(config_file)
 
     # === Init Environment === #
@@ -60,12 +62,16 @@ if __name__ == "__main__":
     # initialize obs_normalizer and target_scaler
     obs_normalizer = Normalizer(config.env.flat_state_dim, config.normalizers.obs.eps)
     target_scaler = CriticTargetScaler(config.env.flat_state_dim, config.normalizers.target.update_rate, config.normalizers.target.eps)
-
+    target_scaler = None
 
 
     # Initialize Neural Agent
-    agent = PPOAgent(actor, critic, actor_optim, critic_optim, obs_normalizer = obs_normalizer, target_scaler = target_scaler,
-                      **config.agent.kwargs.toDict())
+    if hasattr(config.agent, "lta_agent") and config.agent.lta_agent:
+        agent = LTAPPOAgent(actor, critic, actor_optim, critic_optim, obs_normalizer = obs_normalizer, target_scaler = target_scaler,
+                          **config.agent.kwargs.toDict())
+    else:
+        agent = PPOAgent(actor, critic, actor_optim, critic_optim, obs_normalizer = obs_normalizer, target_scaler = target_scaler,
+                          **config.agent.kwargs.toDict())
 
     if hasattr(config.agent, "safety"):
         agent = init_safe_agent(config.agent.safety, agent, env)
@@ -77,11 +83,14 @@ if __name__ == "__main__":
     history = None
     pbar = tqdm(range(config.train.num_episodes), ncols=80, desc="Training Episodes")
     artifact = wandb.Artifact(config.artifact_name, type="agent")
+    history = None
     for eps in pbar:
-        rollout = gen_rollout(env, agent, length = config.train.batch_size, show_progress=False, reset = True)
+        rollout = gen_rollout(env, agent, length = config.train.batch_size, show_progress=False, reset = config.train.reset)
         buffer.add_transitions(rollout)
         rollout = process_rollout(rollout, agent)
         eps_lta_reward = log_rollout_summary(rollout, eps, glob="rollout_summary")
+        if not config.train.reset:
+            history, _ = log_rollouts(rollout, glob="Live Rollout", history=history)
         batch = buffer.get_last_rollout()
         update_metrics = agent.update(batch)
         log_update_metrics(update_metrics, eps, glob="update_metrics", type = "minibatches")

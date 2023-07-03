@@ -132,6 +132,7 @@ def log_update_metrics(metrics, eps = None, type = "all", glob = "update"):
     # or just the final epoch
     if isinstance(type, str):
         type = [type]
+    log_dict = {"eps": eps}
     if "all" in type:
         for key in metrics.keys():
             if len(metrics[key]) == 0:
@@ -139,7 +140,7 @@ def log_update_metrics(metrics, eps = None, type = "all", glob = "update"):
             wandb.define_metric(f"{glob}/{key}-mean", summary = "mean")
             wandb.define_metric(f"{glob}/{key}-max", summary = "max")
             wandb.define_metric(f"{glob}/{key}-min", summary = "min")
-        log_dict = {}
+
         for key in metrics.keys():
             if len(metrics[key]) == 0:
                 continue
@@ -153,7 +154,6 @@ def log_update_metrics(metrics, eps = None, type = "all", glob = "update"):
             if len(metrics[key]) == 0:
                 continue
             wandb.define_metric(f"{glob}/{key}-mean", summary = "mean")
-        log_dict = {}
         for key in metrics.keys():
             if len(metrics[key]) == 0:
                 continue
@@ -166,7 +166,6 @@ def log_update_metrics(metrics, eps = None, type = "all", glob = "update"):
             if len(metrics[key]) == 0:
                 continue
             wandb.define_metric(f"{glob}/{key}")
-        log_dict = {}
         for key in metrics.keys():
             if len(metrics[key]) == 0:
                 continue
@@ -182,7 +181,7 @@ def log_update_metrics(metrics, eps = None, type = "all", glob = "update"):
         n_mbs = len(metrics["critic_loss"])
         mb_init_step = n_mbs*eps
         for i in range(n_mbs):
-            log_dict = {f"{glob}/mb": mb_init_step + i}
+            log_dict[f"{glob}/mb"] =  mb_init_step + i
             for key in metrics.keys():
                 log_dict[f"{glob}/{key}"] = metrics[key][i]
             wandb.log(log_dict)

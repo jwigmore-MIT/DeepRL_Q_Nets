@@ -85,5 +85,10 @@ class CriticTargetScaler:
     def normalize(self, target_values):
         return (target_values - self.target_mean) / max(self.target_std, self.epsilon)
 
+class FakeTargetScaler:
+
+    def init(self):
+        self.mean = None
+        self.std = None
 
 

@@ -292,14 +292,15 @@ class MultiClassMultiHop(gym.Env):
         for link, l_info in cap_dict.items():
             if isinstance(link, str):
                 link = eval(link)
-            if link == '(0,0)':
+            if link == (0,0):
                 continue
             rv = bern_rv(num = l_info['capacity'], prob= l_info['probability'])
             caps[link] = rv
             if self.bidirectional: # add reverse link
                 caps[link[::-1]] = deepcopy(rv)
 
-
+        if (0,0) in caps.keys():
+            del caps[(0,0)]
 
 
         return caps
@@ -310,7 +311,7 @@ class MultiClassMultiHop(gym.Env):
         for cls_num, cls_info in class_dict.items():
             rv = bern_rv(num = cls_info['arrival'], prob = cls_info['probability'])
             classes[int(cls_num)] = [cls_info['source'], cls_info['destination'], rv]
-            destinations[cls_num] = cls_info['destination']
+            destinations[int(cls_num)] = cls_info['destination']
         return classes, destinations
     # internal dynamics
     def _sim_capacities(self):

@@ -93,8 +93,8 @@ def init_safe_agent(safety_config, neural_agent, env):
     Initialize a safe agent from a config file
     """
     # Create Safe Policy
-    if safety_config.safe_policy == "BPM":
-        safe_policy = MCMHBackPressurePolicy(env, M = True)
+    if safety_config.safe_policy == "BP":
+        safe_policy = MCMHBackPressurePolicy(env, **safety_config.args.toDict())
     else:
         raise NotImplementedError("Safe policy not implemented")
 
