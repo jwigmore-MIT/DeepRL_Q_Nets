@@ -34,7 +34,7 @@ if __name__ == "__main__":
     # === Init Config === #
     #config_file = "PPO-Gaussian-Env1b.yaml"
     config_file = "SafePPO-Gaussian-Env1b.yaml"
-    config_file = "SafeLTAPPO-Gaussian-Env1b.yaml"
+    config_file = "SafeLTAPPO-Gaussian-Env2a.yaml"
     config = parse_config(config_file)
 
     # === Init Environment === #

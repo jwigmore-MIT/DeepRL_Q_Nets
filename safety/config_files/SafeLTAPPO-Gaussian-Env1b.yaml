@@ -47,13 +47,13 @@ agent:
   kwargs:
     update_epochs: 10 # number of updates to perform per batch
     minibatches: 4 # number of minibatches to break the data up into
-    alpha: 0.2
+    alpha: 0.1
     gae_lambda: 0.95
     clip_coef: 0.2
     kl_coef: 0.0
     ent_coef: 0.0
     kl_target: 1
-    grad_clip: ~
+    grad_clip: 10
     value_clip: 1
     vf_coef: 0.5
     imit_coef: 1.0
@@ -75,7 +75,7 @@ wandb:
 
 train:
   num_episodes: 2000
-  batch_size: 128
+  batch_size: 64
   reset: false
 
 eval:

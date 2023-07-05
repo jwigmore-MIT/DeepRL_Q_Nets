@@ -51,7 +51,7 @@ class LTAPPOAgent:
         self.alpha = alpha # LTA estimate update rate
         self.nu = 0.1 # Average Value Constraint Coefficient
         self.eta = None # LTA estimate
-        self.b = 0
+        self.b = None
         self.gamma = 1
         self.gae_lambda = gae_lambda
 
@@ -193,7 +193,8 @@ class LTAPPOAgent:
     def update_critic_mb(self, mb_obs, mb_targets):
         new_values = self.get_nn_value(mb_obs)
         new_values = new_values
-        critic_loss = self.compute_critic_loss(new_values, mb_targets - self.b*self.nu)
+        bias_factor = self.b*self.nu
+        critic_loss = self.compute_critic_loss(new_values, mb_targets - bias_factor)
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
@@ -231,7 +232,11 @@ class LTAPPOAgent:
                 "explained_variance": explained_variance.item(),
                 "target_mean": target_mean,
                 "target_std": target_std,
-                "eta": self.eta,}
+                "eta": self.eta,
+                "mb_targets": mb_targets.mean().item(),
+                "mb_values": new_values.mean().item(),
+                "bias_factor": bias_factor,
+                "b": self.b}
 
 
     def update_critic(self, batch: dict, b_targets: torch.Tensor):
@@ -267,7 +272,9 @@ class LTAPPOAgent:
                 "avg_critic_true_error: ": true_errors.abs().mean().item(),
                 "explained_variance": explained_variance.item(),
                 "target_mean": self.target_scaler.target_mean,
-                "target_std": self.target_scaler.target_std}
+                "target_std": self.target_scaler.target_std,
+                "nn_values": nn_values.mean().item()}
+
 
 
 
@@ -300,8 +307,10 @@ class LTAPPOAgent:
     def update_b(self, nn_obs ):
         with torch.no_grad():
             values = self.get_true_value(nn_obs)  # nn_obs = batch["nn_obs"]
-
-            self.b = self.b * (1-self.alpha) + values.mean(dim=0) * self.alpha
+            if self.b is None:
+                self.b = values.mean(dim=0)
+            else:
+                self.b = self.b * (1-self.alpha) + values.mean(dim=0) * self.alpha
 
 
     # === Actor Methods === #
