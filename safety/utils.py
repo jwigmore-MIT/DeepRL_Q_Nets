@@ -6,7 +6,10 @@ import numpy as np
 import torch
 import random
 import pickle
-
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import sys
 
 def parse_cleanrl_config(config_file_name: str, run_type = "TRAIN"):
     working_dir = os.path.dirname(os.path.abspath(__file__))  # directory root i.e. DeepRL_Q_Nets/SB3
@@ -57,8 +60,14 @@ def parse_config(config_file_name: str, run_type = "TRAIN"):
         config.save_dir = os.path.join(working_dir, "saved_models", config.run_name)
         os.makedirs(config.save_dir, exist_ok=True)
 
+    config.debug = debugger_is_active()
+
 
     return config
+
+def debugger_is_active() -> bool:
+    """Return if the debugger is currently active"""
+    return hasattr(sys, 'gettrace') and sys.gettrace() is not None
 
 
 def process_rollout(rollout, agent):
@@ -106,3 +115,59 @@ def save_config(config, save_dir):
     Saves the config
     """
     yaml.dump(config, open(save_dir + "/config.yaml", "w"))
+
+
+def visualize_buffer_pyplot(buffer, item_str, dim, range_ = None):
+
+    if range_ is None:
+        range_ = np.arange(buffer._pointer)
+
+    item = getattr(buffer, item_str)
+    item = item[range_]
+    fig = plt.hist2d(x = range_, y = item[:,dim])
+    # Add title to figure
+    plt.title(f"{item_str} {dim} t = [{range_[0]}: {range_[-1]}]")
+    plt.show()
+    return fig
+
+def visualize_buffer(buffer, item_str, dims, range_ = None):
+    if isinstance(dims, int):
+        dims = [dims]
+
+    fig = make_subplots(rows=len(dims), cols=1, subplot_titles=[f"{item_str} {dim}" for dim in dims])
+
+    if isinstance(buffer, dict):
+        item = buffer[item_str]
+    else:
+        item = getattr(buffer, item_str)
+
+
+    if range_ is None:
+        if hasattr(buffer, "_pointer"):
+            range_ = np.arange(buffer._pointer)
+        else:
+            range_ = np.arange(item.shape[0])
+
+    item = item[range_]
+
+    row = 1
+    for dim in dims:
+        fig.add_trace(go.Histogram2d(x = range_, y = item[:,dim], name = f"{item_str} {dim}", coloraxis="coloraxis"), row=row, col = 1)
+        row+=1
+    fig.update_layout(title_text=f"{item_str} {dims} t = [{range_[0]}: {range_[-1]}]")
+    fig.update_layout(height=400*row,  title_x=0.5, title_font_size=30)
+    fig.show()
+    return fig
+
+def wandb_sweep_helper(wandb_config):
+    """
+    Helper function to convert wandb sweep config to a Munch object
+    """
+    config = wandb_config.as_dict()
+    config.env.env_name = config.env.env_json_path.split("/")[-1].split(".")[0]
+    config.run_name = config.agent.policy_name + "_" + config.env.env_name + "_"  + "TRAIN" + "_" + datetime.now().strftime("%Y%m%d-%H%M%S")
+    config.artifact_name = config.agent.policy_name + "_" + config.env.env_name + "_" + "agent"
+    config.root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config.BP = True if config.agent.policy_name.__contains__("BP") else False
+    config.debug = debugger_is_active()
+    return config

@@ -408,7 +408,7 @@ class MultiClassMultiHop(gym.Env):
         return spaces.utils.unflatten(self.observation_space, flat_obs)
 
     def unflatten_action(self, flat_action):
-        return spaces.utils.unflatten(self.action_space, flat_action)
+        return spaces.utils.unflatten(self.action_space, flat_action.round())
 
     # Generating and Mapping spaces
     def get_flat_obs_keys(self):

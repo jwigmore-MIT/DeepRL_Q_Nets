@@ -23,16 +23,18 @@ normalizers:
     eps: 1.0e-6
 
 agent:
-  policy_name: "PPO-Gaussian"
-  policy: "PPO-Gaussian"
+  policy_name: "PPO-Discrete"
+  policy: "PPO-Discrete"
   safe_agent: false
   lta_agent: false
   actor:
-    type: "Gaussian"
+    type: "Discrete"
     learning_rate: 3.0e-04
+    std_learning_rate: 3.0e-04
     kwargs:
       hidden_dim: 64
-      init_std: 2
+      init_std: 1
+
 
 
   critic:

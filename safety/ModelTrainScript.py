@@ -24,7 +24,7 @@ from safety.agents.actors import init_actor
 from safety.agents.critics import Critic
 from safety.agents.ppo_agent import PPOAgent
 from safety.agents.lta_ppo_agent import LTAPPOAgent
-from safety.agents.normalizers import Normalizer, CriticTargetScaler
+from safety.agents.normalizers import MovingNormalizer, CriticTargetScaler, FixedNormalizer, MovingNormalizer2
 from safety.agents.safe_agents import init_safe_agent
 
 
@@ -33,8 +33,11 @@ if __name__ == "__main__":
 
     # === Init Config === #
     #config_file = "PPO-Gaussian-Env1b.yaml"
-    config_file = "SafePPO-Gaussian-Env1b.yaml"
-    config_file = "SafeLTAPPO-Gaussian-Env2a.yaml"
+    #config_file = "SafePPO-Gaussian-Env1b.yaml"
+    #config_file = "continuing/SafeLTAPPO-Gaussian-Env1b.yaml"
+    #config_file = "PPO-TanGaussian-Env1b.yaml"
+    #config_file = "SafePPO-TanGaussian-Env1b.yaml"
+    config_file = "continuing/SafeLTAPPO-TanGaussian-TwoTriangle2.yaml"
     config = parse_config(config_file)
 
     # === Init Environment === #
@@ -52,17 +55,21 @@ if __name__ == "__main__":
     buffer = Buffer(config.env.flat_state_dim, config.env.flat_action_dim, config.buffer.size, config.device)
 
     # initialize actor and critic
-    actor = init_actor(config, mid, action_ranges)
+    actor, actor_optim = init_actor(config, mid, action_ranges)
     actor.to(config.device)
-    critic = Critic(config.env.flat_state_dim, config.agent.critic.hidden_dim)
+    critic = Critic(config.env.flat_state_dim, **config.agent.critic.kwargs.toDict())
     critic.to(config.device)
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=config.agent.actor.learning_rate)
+    #actor_optim = torch.optim.Adam(actor.parameters(), lr=config.agent.actor.learning_rate)
+
     critic_optim = torch.optim.Adam(critic.parameters(), lr=config.agent.critic.learning_rate)
 
     # initialize obs_normalizer and target_scaler
-    obs_normalizer = Normalizer(config.env.flat_state_dim, config.normalizers.obs.eps)
+    #obs_normalizer = MovingNormalizer(config.env.flat_state_dim, config.normalizers.obs.eps)
+    obs_normalizer = FixedNormalizer(config.env.flat_state_dim, config.normalizers.obs.norm_factor)
+    #obs_normalizer = MovingNormalizer2(config.env.flat_state_dim, config.normalizers.obs.eps, buffer_size = 128, beta = 0.2)
     target_scaler = CriticTargetScaler(config.env.flat_state_dim, config.normalizers.target.update_rate, config.normalizers.target.eps)
-    target_scaler = None
+    if config.agent.lta_agent:
+        target_scaler = None
 
 
     # Initialize Neural Agent

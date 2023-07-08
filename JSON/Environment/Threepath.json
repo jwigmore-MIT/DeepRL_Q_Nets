@@ -1,0 +1,42 @@
+{
+  "problem_instance": {
+    "name": "ThreePath",
+    "notes": "",
+    "nodes": "[1, 2, 3, 4, 5]",
+    "links": "[[1,2], [2,5], [1,3], [3,5], [1,4], [4,5]]",
+    "classes": {
+      "1": {
+        "source": 1,
+        "destination": 5,
+        "arrival": 4,
+        "probability": 0.9
+      }
+    },
+    "capacities": {
+      "(1,2)": {
+        "capacity": 1,
+        "probability": 1
+      },
+      "(1,3)": {
+        "capacity": 2,
+        "probability": 1
+      },
+      "(1,4)": {
+        "capacity": 1,
+        "probability": 1
+      },
+       "(2,5)": {
+        "capacity": 1,
+        "probability": 1
+      },
+      "(3,5)": {
+        "capacity": 2,
+        "probability": 1
+      },
+       "(4,5)": {
+        "capacity": 1,
+        "probability": 1
+      }
+    }
+  }
+}

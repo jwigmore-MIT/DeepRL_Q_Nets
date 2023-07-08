@@ -34,9 +34,11 @@ class MCMHBackPressurePolicy(nn.Module):
         for link in self.links:
             self.mu[link] = pulp.LpVariable('mu' + '_' + str(link[0]) + '_' + str(link[1]), lowBound=0, cat='Integer')
         # initialize the solver
-        self.solver = pulp.PULP_CBC_CMD(msg=False)
+        self.solver = pulp.PULP_CBC_CMD(msg=False, warmStart=False)
         self.dist = env.get_distances()
         self.destinations = env.get_destinations()
+        self.solution_table = {}
+        self.resolve = True
 
 
 
@@ -55,23 +57,26 @@ class MCMHBackPressurePolicy(nn.Module):
     def _forward(self, state : dict, old_state = None):
         #state = keys_to_ints(batch_state)
         state = state
-        f = deepcopy(self.action_format) # flow for each class on each link
-        # formulate the problem
-        problem, opt_ij = self.Formulate(state)
-        # solve the problem
-        problem.solve(self.solver)
-        # get the result for service
-        for link in self.links:
-            val = pulp.value(self.mu[link])
-            f[link][opt_ij[link][0]] = int(val) if val != None else 0
-        # if self.map_to_discrete:
-        #     f = self.get_action_key(f)
-        # else: # need to convert keys to strings for batching
-        f = self.env.flatten_action(f)
-        # result = {'act': f,
-        #           'state': None}
+        t_state = tuple(state)
+        if t_state not in list(self.solution_table.keys()) or self.resolve:
+            f = deepcopy(self.action_format) # flow for each class on each link
+            # formulate the problem
+            problem, opt_ij = self.Formulate(state)
+            # solve the problem
+            problem.solve(self.solver)
 
-        return f[0,:]
+            # get the result for service
+            for link in self.links:
+                val = pulp.value(self.mu[link])
+                f[link][opt_ij[link][0]] = int(val) if val != None else 0
+            # if self.map_to_discrete:
+            #     f = self.get_action_key(f)
+            # else: # need to convert keys to strings for batching
+            f = self.env.flatten_action(f)
+            self.solution_table[t_state] = f[0,:]
+            return f[0,:]
+        else:
+            return self.solution_table[t_state]
 
     def get_action_key(self, action):
         keys = [k for k, v in self.env.action_map.items() if v == action]

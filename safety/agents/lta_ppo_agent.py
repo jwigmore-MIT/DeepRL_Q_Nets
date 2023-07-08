@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 import numpy as np
 from typing import Union
-from safety.agents.normalizers import Normalizer, CriticTargetScaler, FakeTargetScaler
+from safety.agents.normalizers import MovingNormalizer, CriticTargetScaler, FakeTargetScaler
 from safety.agents.critics import Critic
 import pickle
 
@@ -14,11 +14,13 @@ class LTAPPOAgent:
                  critic: nn.Module,
                  actor_optimizer: torch.optim.Optimizer,
                  critic_optimizer: torch.optim.Optimizer,
-                 obs_normalizer: Normalizer = None,
+                 obs_normalizer: MovingNormalizer = None,
                  target_scaler: CriticTargetScaler = None,
                  update_epochs: int = 10,
                  minibatches: int = 1,
+                 shuffle_mb: bool = True,
                  alpha: float = 0.1,
+                 nu: float = 1.0,
                  gae_lambda: float = 0.95,
                  clip_coef: float = 0.25,
                  kl_coef: float = 0.0,  # Beta in PPO paper
@@ -46,10 +48,11 @@ class LTAPPOAgent:
         # Update step parameters
         self.update_epochs = update_epochs
         self.minibatches = minibatches
+        self.shuffle_mb = shuffle_mb
 
         # For value/advantage estimation
         self.alpha = alpha # LTA estimate update rate
-        self.nu = 0.1 # Average Value Constraint Coefficient
+        self.nu = nu # Average Value Constraint Coefficient
         self.eta = None # LTA estimate
         self.b = None
         self.gamma = 1
@@ -76,7 +79,7 @@ class LTAPPOAgent:
         # Still need to normalize the observation
         if self.obs_normalizer is not None:
             nn_obs = self.obs_normalizer.normalize(obs, update=True)
-            action = self.actor.act(obs, device)
+            action = self.actor.act(nn_obs, device)
             return action, nn_obs
         else:
             return self.actor.act(obs, device), obs
@@ -91,8 +94,7 @@ class LTAPPOAgent:
         next_nn_obs = torch.Tensor(self.obs_normalizer.normalize(batch["next_obs"][-1].numpy(), update=False))
 
         # update the eta estimate
-        self.update_eta(batch["rewards"])
-        self.update_b(batch['nn_obs'])
+        self.update_b_eta(batch["rewards"], batch["nn_obs"])
 
         for i in range(self.update_epochs):
             # Compute the
@@ -108,7 +110,8 @@ class LTAPPOAgent:
 
             # get indices
             b_inds = np.arange(len(batch['nn_obs']))
-            np.random.shuffle(b_inds)
+            if self.shuffle_mb:
+                np.random.shuffle(b_inds)
             minibatch_size = int(len(b_inds) // self.minibatches)
 
             results = {}
@@ -298,19 +301,21 @@ class LTAPPOAgent:
                 adv[t] = last_gae_lam =  delta +  self.gamma * self.gae_lambda* last_gae_lam
         return adv
 
-    def update_eta(self, rewards):
+    def update_b_eta(self, rewards, nn_obs):
+        # updating eta
         if self.eta is None:
             self.eta = rewards.mean().item()
         else:
-            self.eta = self.eta * self.alpha + rewards.mean().item() * (1 - self.alpha)
-
-    def update_b(self, nn_obs ):
+            self.eta = self.eta * (1-self.alpha) + rewards.mean().item() * (self.alpha)
         with torch.no_grad():
+            # updating b
             values = self.get_true_value(nn_obs)  # nn_obs = batch["nn_obs"]
             if self.b is None:
-                self.b = values.mean(dim=0)
+                self.b = values.mean()
             else:
-                self.b = self.b * (1-self.alpha) + values.mean(dim=0) * self.alpha
+                self.b = self.b * (1 - self.alpha) + values.mean() * self.alpha
+
+
 
 
     # === Actor Methods === #

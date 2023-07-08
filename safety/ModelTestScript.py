@@ -24,7 +24,7 @@ from Environments.MCMH_tools import generate_env
 from safety.agents.actors import init_actor
 from safety.agents.critics import Critic
 from safety.agents.ppo_agent import PPOAgent
-from safety.agents.normalizers import Normalizer, CriticTargetScaler
+from safety.agents.normalizers import MovingNormalizer, CriticTargetScaler
 
 
 

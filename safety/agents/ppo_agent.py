@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 import numpy as np
 from typing import Union
-from safety.agents.normalizers import Normalizer, CriticTargetScaler
+from safety.agents.normalizers import MovingNormalizer, CriticTargetScaler
 from safety.agents.critics import Critic
 import pickle
 
@@ -14,7 +14,7 @@ class PPOAgent:
                  critic: nn.Module,
                  actor_optimizer: torch.optim.Optimizer,
                  critic_optimizer: torch.optim.Optimizer,
-                 obs_normalizer: Normalizer = None,
+                 obs_normalizer: MovingNormalizer = None,
                  target_scaler: CriticTargetScaler = None,
                  update_epochs: int = 10,
                  minibatches: int = 1,
@@ -61,6 +61,9 @@ class PPOAgent:
         self.imit_coef = imit_coef
         self.pg_coef  = pg_coef
         self.int_coef = int_coef
+        self.agent_buffer = agent_buffer()
+
+
 
 
 
@@ -71,7 +74,7 @@ class PPOAgent:
         # Still need to normalize the observation
         if self.obs_normalizer is not None:
             nn_obs = self.obs_normalizer.normalize(obs, update=True)
-            action = self.actor.act(obs, device)
+            action = self.actor.act(nn_obs, device)
             return action, nn_obs
         else:
             return self.actor.act(obs, device), obs
@@ -279,6 +282,7 @@ class PPOAgent:
     def update_actor_mb(self, mb_obs, mb_actions, mb_log_probs, mb_advantages, mb_interventions):
         update = True
         result = self.actor.log_prob(mb_obs, mb_actions, extra=True)
+        self.agent_buffer.add_data(result)
         log_ratio = (result["log_probs"] - mb_log_probs)
         ratio = log_ratio.exp()
 
@@ -287,8 +291,10 @@ class PPOAgent:
         if self.kl_coef == 0:
             with torch.no_grad():
                 approx_kl = -log_ratio.mean()
+                #approx_kl = ((ratio - 1) - log_ratio).mean()
         else:
             approx_kl = -log_ratio.mean()
+            #approx_kl = ((ratio - 1) - log_ratio).mean()
         # if approx_kl < 0:
         #     print("Negative KL detected")
 
@@ -331,6 +337,8 @@ class PPOAgent:
             pg_magnitude = torch.Tensor([0])
         for key in result.keys():
             result[key] = result[key].mean().item()
+
+
         result["actor_loss"] = actor_loss.item()
         result["advantages"] = mb_advantages.mean().item()
         result["approx_kl"] = approx_kl.item()
@@ -429,4 +437,31 @@ class PPOAgent:
         pickle.dump(self.agent_parameters, open(save_path + "agent_parameters.pkl", "wb"))
 
 
+
+
+class agent_buffer:
+
+    def __init__(self):
+        self._pointer = 0
+        self.max_size = 1000000
+        self.buffer = {}
+
+    def add_data(self, dict_):
+        "dict_ is a dictionary of Tensors"
+        for key, value in dict_.items():
+            # convert the data from a tensor to a numpy array
+            data = value.detach().numpy()
+            n_data = data.shape[0]
+            if len(data.shape) == 1:
+                data = data.reshape((n_data, 1))
+
+            l_data = data.shape[1]
+            # if the key is not an attribute of the class, add it as an attribute
+            if not hasattr(self, key):
+                init_data = np.zeros((self.max_size, l_data))
+                setattr(self, key, init_data)
+
+            item = getattr(self, key)
+            item[self._pointer: self._pointer + n_data] = data
+        self._pointer += n_data
 

@@ -17,7 +17,8 @@ def wandb_init(config) -> None:
         name=config.run_name,
         id=str(uuid.uuid4()),
         tags=tags,
-        tensorboard=True,
+        notes = config.notes,
+        tensorboard=False,
     )
     return run
 

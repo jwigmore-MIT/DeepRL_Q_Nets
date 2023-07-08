@@ -1,5 +1,6 @@
 ---
 config:
+notes: ~
 root_dir: ~
 seed: 5031997
 device: "cpu"
@@ -20,21 +21,22 @@ agent:
 
 
 env:
-    env_json_path: "/JSON/Environment/TwoTriangle1.json"
+    env_json_path: "/JSON/Environment/Env1/Env1b.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false
       record_stats: true
 
 wandb:
-    project: "Debug2"
-    group: "Environment+Backpressure"
+    project: "BackpressureComparison"
+    group: "Backpressure"
 
 
 
 eval:
   n_eval_episodes: 10
   deterministic: true
+  length: 1000
 
 
 

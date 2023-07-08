@@ -14,47 +14,52 @@ load:
   zip_path: saved_models/PPO_Env1a_TRAIN_20230621-123803/best_model
 
 buffer:
-  size: 1.0e+7
+  size: 1.0e+8
 normalizers:
   obs:
+    type: Fixed
+    norm_factor: 80
     eps: 1.0e-6
   target:
     update_rate: 0.2
     eps: 1.0e-6
 
 agent:
-  policy_name: "PPO-Gaussian"
-  policy: "PPO-Gaussian"
-  safe_agent: false
-  lta_agent: false
+  policy_name: "SafePPO-Gaussian"
+  policy: "SafePPO-Gaussian"
+  safe_agent: true
+  lta_agent: true
+  safety:
+    safe_policy: "BP"
+    trigger_state: 20
+    args:
+      M: "R"
   actor:
-    type: "Gaussian"
+    type: "TanGaussian"
     learning_rate: 3.0e-04
     kwargs:
       hidden_dim: 64
-      init_std: 2
-
-
+      init_std: 1
   critic:
-    type:
     hidden_dim: 64
     learning_rate: 3.0e-03
   n_epochs: 10
   kwargs:
     update_epochs: 10 # number of updates to perform per batch
     minibatches: 4 # number of minibatches to break the data up into
-    gamma: 0.99
-    gae_lambda: 0.95
+    alpha: 0.2
+    nu: 0.5
+    gae_lambda: 0.5
     clip_coef: 0.2
     kl_coef: 0.0
     ent_coef: 0.0
     kl_target: 1
-    grad_clip: 0.5
+    grad_clip: 10
     value_clip: 1
     vf_coef: 0.5
-    imit_coef: 0.0
+    imit_coef: 0.2
     pg_coef: 1.0
-    int_coef: 0.0
+    int_coef: 0
 
 
 env:
@@ -63,15 +68,17 @@ env:
       normalize_obs: false
       normalize_reward: false
       record_stats: true
+      scale_reward: false
 
 wandb:
-    project: "ActionDistTesting"
-    group: ~
+    project: "ResetTesting"
+    group: "Safety-Testing"
+
 
 train:
-  num_episodes: 1000
-  batch_size: 128
-  reset: true
+  num_episodes: 2000
+  batch_size: 64
+  reset: false
 
 eval:
   n_eval_episodes: 10

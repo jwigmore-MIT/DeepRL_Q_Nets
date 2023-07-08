@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 import numpy as np
 from typing import Union
-from safety.agents.normalizers import Normalizer, CriticTargetScaler
+from safety.agents.normalizers import MovingNormalizer, CriticTargetScaler
 from safety.agents.critics import Critic
 import pickle
 import torch.optim

@@ -2,6 +2,7 @@ import torch.nn as nn
 
 import torch
 import numpy as np
+from safety.agents.utils import layer_init, mlp_init, get_activation
 
 
 class Critic(nn.Module):
@@ -9,6 +10,8 @@ class Critic(nn.Module):
         self,
         state_dim: int,
         hidden_dim: int,
+        hidden_layers: int = 2,
+        activation: str = "tanh",
     ):
         super().__init__()
         self._mlp = nn.Sequential(
@@ -20,6 +23,8 @@ class Critic(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, 1),
         )
+
+        self._mlp = mlp_init(state_dim, 1, hidden_layers, hidden_dim, activation)
 
     def forward(self, state: torch.Tensor) -> torch.Tensor:
         value = self._mlp(state)

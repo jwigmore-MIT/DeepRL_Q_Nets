@@ -1,12 +1,12 @@
 import torch.nn as nn
 import torch
-from safety.agents.utils import layer_init
+from safety.agents.utils import layer_init, mlp_init
 import numpy as np
 from typing import List, Tuple
 
 class MultiDiscreteActor(nn.Module):
 
-    def __init__(self, state_dim, hidden_dim, action_ranges: np.ndarray):
+    def __init__(self, state_dim, hidden_dim, action_ranges: np.ndarray, init_std = None):
         super().__init__()
 
         self.network = nn.Sequential(
@@ -34,9 +34,11 @@ class MultiDiscreteActor(nn.Module):
         multi_cat = self._get_policy(state)
         action_mT = torch.transpose(action, 0, 1)
         log_probs = []
+        means = []
         entropy = []
         for a, categorical in zip(action_mT, multi_cat):
             log_probs.append(categorical.log_prob(a))
+            means.append(categorical.probs)
             entropy.append(categorical.entropy())
 
         logprob = torch.stack(log_probs)
@@ -48,7 +50,8 @@ class MultiDiscreteActor(nn.Module):
         #logprob = torch.stack([categorical.log_prob(a.T) for a, categorical in zip(action_mT, multi_cat)])
         if extra:
             return {"log_probs":log_probs,
-                    "entropy": entropy.mean(0)}# "probs": probs, }
+                    "entropy": entropy.mean(0),
+                    }# "probs": probs, }
         else:
             return log_probs
 
@@ -154,7 +157,8 @@ class GaussianActor(nn.Module):
         min_log_std: float = -5.0,
         max_log_std: float = 2.0,
         bias: np.ndarray = None, # Bias to add to the final layer, should be the midpoint of the range for each action dimension
-        mask_ranges: [np.ndarray] = None, # Range of each action dimension, used to mask the output of the final layer
+        mask_ranges: [np.ndarray] = None,# Range of each action dimension, used to mask the output of the final layer
+        activation_function = "relu"
 ):
         super().__init__()
         final_layer = nn.Linear(hidden_dim, action_dim, bias=True)
@@ -196,7 +200,7 @@ class GaussianActor(nn.Module):
             return log_prob
         else:
             policy_means = policy.mean
-            policy_stds = policy.scale[-1]
+            policy_stds = policy.scale
             entropy = policy.entropy().sum(-1, keepdim=True)
             return {"log_probs": log_prob,
                     "actor_means": policy_means,
@@ -222,17 +226,18 @@ class GaussianActor(nn.Module):
         return action.cpu().data.numpy().flatten()
 
 
-class TanGaussianActor(nn.Module):
+class TanGaussianActor0(nn.Module):
     def __init__(self,
                  state_dim: int,
                  action_dim: int,
                  hidden_dim: int,
-                 init_std: float = 1.0,
+                 init_std: float = 3,
                  action_mids: [np.ndarray] = None,
-                 log_std_min: float = -5,
-                 log_std_max: float = 2,
+                 std_min: float = 0.1,
+                 std_max: float = 4,
                  ):
         super().__init__()
+
         self._mlp = nn.Sequential(
             layer_init(nn.Linear(state_dim, hidden_dim)),
             nn.ReLU(),
@@ -240,13 +245,109 @@ class TanGaussianActor(nn.Module):
             nn.ReLU(),
             layer_init(nn.Linear(hidden_dim, hidden_dim)),
             nn.ReLU(),
+
         )
-        self._mean_layer = layer_init(nn.Linear(hidden_dim, action_dim))
+        self.mean_layer = layer_init(nn.Linear(hidden_dim, action_dim))
+        self.log_std_layer = layer_init(nn.Linear(hidden_dim, action_dim))
+        self._init_log_std = np.log(init_std)
+        self._min_log_std = np.log(std_min)
+        self._max_log_std = np.log(std_max)
+        self.register_buffer(
+            "action_scale", torch.tensor(action_mids, dtype=torch.float32)
+        )
+        self.register_buffer(
+            "action_bias", torch.tensor(action_mids, dtype=torch.float32)
+        )
+        self.action_mask = self.action_scale > 0
+
+    def _get_policy(self, state: torch.Tensor):
+        m = self._mlp(state)
+        mean = self.mean_layer(m)
+        log_std = self.log_std_layer(m) + self._init_log_std
+        log_std = torch.clamp(log_std, self._min_log_std, self._max_log_std)
+        #log_std = self._min_log_std  + 0.5 * (self._max_log_std  - self._min_log_std ) * (log_std + 1.75) #
+        policy = torch.distributions.Normal(mean, log_std.exp())
+        return policy, mean, log_std
+
+    def forward(self, state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        policy, mean, log_std = self._get_policy(state)
+        x_t = policy.rsample()
+        y_t = torch.tanh(x_t)
+        action = y_t * self.action_scale + self.action_bias
+        log_prob = policy.log_prob(x_t)
+        # Enforcing Action Boundaries
+        #log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
+        log_prob = log_prob.sum(-1, keepdim=True)
+        return action, log_prob
+
+    def log_prob(self, state: torch.Tensor, action: torch.Tensor, extra= False):
+        # step 1: scale actions to the true range
+        y_t = ((action - self.action_bias) / self.action_scale+1e-6).nan_to_num(-1)
+        y_t = torch.clamp(y_t, -0.95, 0.95)
+        x_t = torch.atanh(y_t)
+        # step 2: get log probability
+        policy, mean, log_std = self._get_policy(state)
+        log_prob = policy.log_prob(x_t)
+        #log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
+        log_prob = self.action_mask * log_prob
+        log_prob = log_prob.sum(1, keepdim=True)
+        # if log_prob.min().item() < -100:
+        #     print('log_prob is less than -100')
+        if not extra:
+            return log_prob
+        else:
+            policy_means = torch.tanh(mean) * self.action_scale + self.action_bias
+            policy_stds = policy.scale[-1]
+            entropy = policy.entropy().sum(-1)
+            return {"log_probs": log_prob,
+                    "actor_means": policy_means,
+                    "actor_stds": policy_stds,
+                    "entropy": entropy}
+
+    def act(self, state: np.ndarray, device: str) -> np.ndarray:
+        state_t = torch.tensor(state[None], dtype=torch.float32, device=device)
+        policy, mean, log_std = self._get_policy(state_t)
+        if self._mlp.training:
+            x_t = policy.rsample()
+        else:
+            x_t = mean
+        y_t = torch.tanh(x_t)
+        action = y_t * self.action_scale + self.action_bias
+
+        return action.cpu().data.numpy().flatten()
+
+class TanGaussianActor(nn.Module):
+    def __init__(self,
+                 state_dim: int, #input dim
+                 action_dim: int, #output dim
+                 hidden_dim: int,
+                 hidden_layers: int = 2,
+                 activation: str = 'tanh',
+                 init_std: float = 1,
+                 action_mids: [np.ndarray] = None,
+                 log_std_min: float = -5,
+                 log_std_max: float = 2,
+                 ):
+        super().__init__()
+
+        # self._mlp = nn.Sequential(
+        #     layer_init(nn.Linear(state_dim, hidden_dim)),
+        #     nn.ReLU(),
+        #     layer_init(nn.Linear(hidden_dim, hidden_dim)),
+        #     nn.ReLU(),
+        #     layer_init(nn.Linear(hidden_dim, hidden_dim)),
+        #     nn.ReLU(),
+        #     layer_init(nn.Linear(hidden_dim, action_dim))
+        # )
+
+
+        self._mlp = mlp_init(state_dim, action_dim, hidden_layers, hidden_dim, activation)
+
         #self._log_std_layer = layer_init(nn.Linear(hidden_dim, action_dim))
         init_log_std = torch.ones(action_dim, dtype=torch.float32) * np.log(init_std)
         self._log_std = nn.Parameter(init_log_std)
-        self.log_std_min = log_std_min
-        self.log_std_max = log_std_max
+        self._min_log_std = log_std_min
+        self._max_log_std = log_std_max
         self.register_buffer(
             "action_scale", torch.tensor(action_mids, dtype=torch.float32)
         )
@@ -256,9 +357,9 @@ class TanGaussianActor(nn.Module):
         self.action_mask = self.action_scale > 0
 
     def _get_policy(self, state: torch.Tensor) -> torch.distributions.Distribution:
-        x = self._mlp(state)
-        mean = self._mean_layer(x)
-        log_std = self._log_std_layer(x)
+
+        mean = self._mlp(state)
+        log_std = self._log_std.clamp(self._min_log_std, self._max_log_std)
         # log_std = torch.tanh(log_std) # log_std in [-1, 1]
         # log_std = self.log_std_min + 0.5 * (self.log_std_max - self.log_std_min) * (log_std + 1) #
         policy = torch.distributions.Normal(mean, log_std.exp())
@@ -277,8 +378,8 @@ class TanGaussianActor(nn.Module):
 
     def log_prob(self, state: torch.Tensor, action: torch.Tensor, extra= False):
         # step 1: scale actions to the true range
-        y_t = ((action - self.action_bias) / self.action_scale+1e-6).nan_to_num(0)
-        y_t = torch.clamp(y_t, -0.999999, 0.999999)
+        y_t = ((action - self.action_bias) / self.action_scale+1e-6).nan_to_num(-1)
+        y_t = torch.clamp(y_t, -0.95, 0.95)
         x_t = torch.atanh(y_t)
         # step 2: get log probability
         policy = self._get_policy(state)
@@ -292,8 +393,8 @@ class TanGaussianActor(nn.Module):
             return log_prob
         else:
             policy_means = torch.tanh(policy.mean) * self.action_scale + self.action_bias
-            policy_stds = policy.scale[-1]
-            entropy = policy.entropy().sum(-1, keepdim=True)
+            policy_stds = policy.scale
+            entropy = policy.entropy().sum(-1)
             return {"log_probs": log_prob,
                     "actor_means": policy_means,
                     "actor_stds": policy_stds,
@@ -370,28 +471,39 @@ class SACTanGaussianActor(nn.Module):
         y_t = torch.tanh(x_t)
         action = y_t * self.action_scale + self.action_bias
         return action
+
 def init_actor(config, mid, action_ranges):
 
     if config.agent.actor.type == "Gaussian":
         actor = GaussianActor(config.env.flat_state_dim, config.env.flat_action_dim,
                               bias = mid, mask_ranges = action_ranges,
                               **config.agent.actor.kwargs.toDict())
+        actor_optim = torch.optim.Adam([
+            {"params": actor._mlp.parameters(), 'lr': config.agent.actor.learning_rate},
+            {"params": actor._log_std, 'lr': config.agent.actor.std_learning_rate},
+        ])
     elif config.agent.actor.type == "Beta":
         actor = BetaActor(config.env.flat_state_dim, config.env.flat_action_dim,
                           action_boundaries= action_ranges,
                           **config.agent.actor.kwargs.toDict())
+        actor_optim = torch.optim.Adam(actor.parameters(), lr=config.agent.actor.learning_rate)
     elif config.agent.actor.type == "Discrete":
         actor = MultiDiscreteActor(config.env.flat_state_dim, action_ranges = action_ranges,
                               **config.agent.actor.kwargs.toDict())
+        actor_optim = torch.optim.Adam(actor.parameters(), lr=config.agent.actor.learning_rate)
     elif config.agent.actor.type == "TanGaussian":
         actor = TanGaussianActor(config.env.flat_state_dim, config.env.flat_action_dim,
                               action_mids = mid, **config.agent.actor.kwargs.toDict())
+        actor_optim = torch.optim.Adam([
+            {"params": actor._mlp.parameters(), 'lr': config.agent.actor.learning_rate},
+            {"params": actor._log_std, 'lr': config.agent.actor.std_learning_rate},
+        ])
     else:
         actor = None
         # Throw error
         Exception(f"Actor {config.agent.actor.type} not implemented")
 
-    return actor
+    return actor, actor_optim
 
 
 

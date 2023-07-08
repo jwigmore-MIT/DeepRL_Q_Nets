@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 
-class Normalizer:
+class MovingNormalizer:
     """
     Normalizes the observations based on running statistics.
     Based on Gym's NormalizeObservation wrapper.
@@ -18,6 +18,69 @@ class Normalizer:
             self.obs_rms.update(obs)
         return (obs - self.obs_rms.mean) / np.sqrt(self.obs_rms.var + self.eps)
 
+class MovingNormalizer2:
+
+    def __init__(self, obs_shape, eps=1e-8, buffer_size = 128, beta = 0.2):
+        self.eps = eps
+        self.obs_shape = obs_shape
+        self.beta = beta
+        self.means = None
+        self.vars = None
+        self.buffer_size = buffer_size
+        self.buffer = np.zeros((buffer_size, obs_shape), dtype=np.float32)
+        self.pointer = 0
+        self.n_updates = 0
+        self.obs_rms = RunningMeanStd(shape=obs_shape)
+    def normalize(self, obs, update = True):
+        # update the running mean and variance
+        if update:
+            self.buffer[self.pointer] = obs
+            self.pointer +=1
+        if self.pointer >= self.buffer_size-1:
+            self.update_stats()
+        if self.n_updates < 1:
+            return (obs - self.buffer[:self.pointer].mean(axis = 0))/ np.sqrt(self.buffer[:self.pointer].var(axis = 0) + self.eps)
+        else:
+            return ((obs - self.means) / np.sqrt(self.vars + self.eps)).clip(-2,2)
+
+    def update_stats(self):
+        sample_mean = self.buffer.mean(axis = 0)
+        sample_var = self.buffer.var(axis = 0)
+        if self.n_updates < 1:
+            self.means = sample_mean
+            self.vars = sample_var
+        else:
+            self.means = self.beta * sample_mean + (1-self.beta) * self.means
+            self.vars = self.beta * sample_var + (1-self.beta) * self.vars
+        self.buffer = np.zeros((self.buffer_size, self.obs_shape), dtype=np.float32)
+        self.pointer = 0
+        self.n_updates += 1
+
+
+
+
+class FixedNormalizer:
+
+    def __init__(self, obs_shape, norm_factor):
+        self.norm_factor = norm_factor
+        self.obs_shape = obs_shape
+        self.range = [-1,1]
+
+    def normalize(self, obs, update = True):
+        new_obs =  2* obs/(self.norm_factor) - 1
+        return new_obs.clip(-1,1)
+
+class ActionScaler:
+    """
+    For each dimension, scales the action range [NOT IMPLEMENTED]
+    """
+    pass
+
+class RewardScaler:
+    """
+    Make the rewards be approximately normal.
+    """
+    pass
 
 class RunningMeanStd:
     "Tracks the mean, variance, and count of values"
@@ -30,6 +93,8 @@ class RunningMeanStd:
 
     def update(self, x):
         """Updates the mean, var and count from a batch of samples."""
+        if len(x.shape) ==1:
+            x = x.reshape(1,-1)
         batch_mean = np.mean(x, axis=0)
         batch_var = np.var(x, axis=0)
         batch_count = x.shape[0]
@@ -91,4 +156,11 @@ class FakeTargetScaler:
         self.mean = None
         self.std = None
 
+
+def init_normalizers(config):
+
+    if config.normalizers.obs.type == "Fixed":
+        obs_normalizer = FixedNormalizer(config.normalizers.obs.shape, config.normalizers.obs.norm_factor)
+    elif config.normalizers.obs.type == "Moving":
+        obs_normalizer = MovingNormalizer2(config.normalizers.obs.shape, 1e-8, config.train.batch_size, config.normalizers.obs.beta)
 

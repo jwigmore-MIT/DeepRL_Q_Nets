@@ -24,7 +24,7 @@ from Environments.MCMH_tools import generate_env
 from safety.agents.actors import init_actor
 from safety.agents.critics import Critic
 from safety.agents.ppo_agent import PPOAgent
-from safety.agents.normalizers import Normalizer, CriticTargetScaler
+from safety.agents.normalizers import MovingNormalizer, CriticTargetScaler
 
 
 
@@ -45,7 +45,7 @@ if __name__ == "__main__":
 
 
     env.reset()
-    rollout = gen_rollout(env, agent, length=2000)
+    rollout = gen_rollout(env, agent, length=config.eval.length)
     test_history, test_lta_reward = log_rollouts(rollout, glob="test")
     log_rollout_summary(rollout, 0, glob="test")
 

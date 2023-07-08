@@ -23,7 +23,7 @@ from Environments.MCMH_tools import generate_env
 from safety.agents.actors import init_actor
 from safety.agents.critics import init_critic
 from safety.agents.ppo_agent import PPOAgent
-from safety.agents.normalizers import Normalizer, CriticTargetScaler
+from safety.agents.normalizers import MovingNormalizer, CriticTargetScaler
 from safety.agents.safe_agents import init_safe_agent
 from safety.agents.sac_agent import SACAgent
 
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     actor_optim = torch.optim.Adam(actor.parameters(), lr=config.actor.learning_rate)
     q_optim = torch.optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=config.critic.learning_rate)
     # initialize obs_normalizer and target_scaler
-    obs_normalizer = Normalizer(config.env.flat_state_dim, config.normalizers.obs.eps)
+    obs_normalizer = MovingNormalizer(config.env.flat_state_dim, config.normalizers.obs.eps)
     #target_scaler = CriticTargetScaler(config.env.flat_state_dim, config.normalizers.target.update_rate, config.normalizers.target.eps)
 
 
