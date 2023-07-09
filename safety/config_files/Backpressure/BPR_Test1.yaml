@@ -21,7 +21,7 @@ agent:
 
 
 env:
-    env_json_path: "/JSON/Environment/Env1/Env1b.json"
+    env_json_path: "/JSON/Environment/Diamond/Diamond2R05.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false
