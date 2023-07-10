@@ -1,5 +1,6 @@
 ---
 config:
+notes: "No imitation loss"
 root_dir: ~
 seed: 5031997
 device: "cpu"
@@ -36,15 +37,19 @@ agent:
     kwargs:
       hidden_dim: 64
       init_std: 1
+      activation: "tanh"
+      hidden_layers: 2
   safety:
     safe_policy: "BP"
     trigger_state: 350
     args:
       M: "R"
   critic:
-    hidden_dim: 64
     learning_rate: 3.0e-03
-  n_epochs: 10
+    kwargs:
+        hidden_dim: 128
+        activation: "tanh"
+        hidden_layers: 2
   kwargs:
     update_epochs: 10 # number of updates to perform per batch
     minibatches: 4 # number of minibatches to break the data up into
@@ -58,7 +63,7 @@ agent:
     grad_clip: 10
     value_clip: 1
     vf_coef: 0.5
-    imit_coef: 1.0
+    imit_coef: 0.0
     pg_coef: 10.0
     int_coef: 0.0
 

@@ -19,7 +19,7 @@ buffer:
 normalizers:
   obs:
     type: Fixed
-    norm_factor: 20
+    norm_factor: 100
     eps: 1.0e-6
   target:
     update_rate: 0.2

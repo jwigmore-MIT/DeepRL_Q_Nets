@@ -2,6 +2,8 @@ import torch.nn as nn
 import torch
 import numpy as np
 from NonDRLPolicies.Backpressure import MCMHBackPressurePolicy
+from NonDRLPolicies.StaticPolicies import JoinTheShortestQueuePolicy
+from copy import deepcopy
 
 
 
@@ -26,24 +28,50 @@ class Interventioner:
         return self.safe_policy.act(state)
 
 
-class ProbabilisticInterventioner(nn.Module):
+class ShrinkingInterventioner:
+
+    def __init__(self, safe_policy, trigger_state = 0, shrink_rate = 1e-4):
+        super().__init__()
+        self.safe_policy = safe_policy
+        self.trigger_state = trigger_state
+        self.shrink_rate = shrink_rate # we increase the trigger state by this amount each time we intervene
+        self.triggers = 0
+        self._init_trigger_state = deepcopy(trigger_state)
+
+
+    def check_safety(self, state):
+        # In unsafe state, return False and int. prob = 1, else, return true and int prob = 0
+
+        if np.sum(state) > self.trigger_state:
+            self.triggers +=1
+            self.trigger_state += self.shrink_rate
+            return False, 1
+        else:
+            return True, 0
+
+    def act(self, state, device = None):
+        return self.safe_policy.act(state)
+
+
+class ProbabilisticInterventioner:
     """
     Allow for some probability of intervention in unsafe states near the boundary
     """
-    def __init__(self, safe_actor, trigger_state = 0, omega = 1.0):
+    def __init__(self, safe_actor, trigger_state = 0, omega = 1.0, arrival_mod = -2):
         super().__init__()
         self.safe_actor = safe_actor
         self.trigger_state = trigger_state
         self.omega = omega
+        self.arrival_mod = arrival_mod
 
     def check_safety(self, state):
         # In unsafe state, return False, otherwise True
-        gap = self.trigger_state - np.sum(state)
+        gap = self.trigger_state - np.sum(state) - 2
         prob = min(1,np.exp(-self.omega * gap))  # probability of intervention
         if np.random.rand() < prob:
-            return (False, prob)
+            return False, prob
         else:
-            return (True, prob)
+            return True, prob
 
 
     def act(self, state, device = None):
@@ -95,6 +123,8 @@ def init_safe_agent(safety_config, neural_agent, env):
     # Create Safe Policy
     if safety_config.safe_policy == "BP":
         safe_policy = MCMHBackPressurePolicy(env, **safety_config.args.toDict())
+    elif safety_config.safe_policy == "JSQ":
+        safe_policy = JoinTheShortestQueuePolicy(env)
     else:
         raise NotImplementedError("Safe policy not implemented")
 
@@ -103,7 +133,13 @@ def init_safe_agent(safety_config, neural_agent, env):
         raise ValueError("Trigger state not specified")
 
     # Create the safe actor
-    safe_actor = Interventioner(safe_policy, trigger_state = safety_config.trigger_state)
+    if hasattr(safety_config, "mod") and safety_config.mod is not None:
+        if safety_config.mod == "prob":
+            safe_actor = ProbabilisticInterventioner(safe_policy, trigger_state = safety_config.trigger_state, **safety_config.mod_args.toDict())
+        elif safety_config.mod == "shrink":
+            safe_actor = ShrinkingInterventioner(safe_policy, trigger_state = safety_config.trigger_state, **safety_config.mod_args.toDict())
+    else:
+        safe_actor = Interventioner(safe_policy, trigger_state = safety_config.trigger_state)
 
     # Create the safe agent
     safe_agent = SafeAgent(neural_agent, safe_actor)

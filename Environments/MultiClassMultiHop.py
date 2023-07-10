@@ -325,6 +325,7 @@ class MultiClassMultiHop(gym.Env):
             self.Q[src][cls] += self.Arr[src][cls]
         # self.logger.record_env_item('arrivals', self.A, self.tt)
 
+
     def _serve(self, flows: dict):
         if isinstance(flows, np.int32):
             flows = self.action_map[flows]
@@ -345,6 +346,7 @@ class MultiClassMultiHop(gym.Env):
 
                 # Subtract f_ijk from start node class k queue
                 self.Q[start_node][cls] = max(self.Q[start_node][cls]-self.f[link][cls],0)
+                Q_old[start_node][cls] = max(Q_old[start_node][cls]-self.f[link][cls],0)
 
                 # Add f_ijk to end node class k queue, if its not the destination
                 if end_node ==  self.classes[cls][1]:

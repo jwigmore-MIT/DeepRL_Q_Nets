@@ -37,7 +37,7 @@ if __name__ == "__main__":
     #config_file = "continuing/SafeLTAPPO-Gaussian-Env1b.yaml"
     #config_file = "PPO-TanGaussian-Env1b.yaml"
     #config_file = "SafePPO-TanGaussian-Env1b.yaml"
-    config_file = "continuing/SafeLTAPPO-TanGaussian-Diamond2.yaml"
+    config_file = "continuing/SafeLTAPPO-Discrete-JSQN2.yaml"
     config = parse_config(config_file)
 
     # === Init Environment === #
@@ -102,8 +102,8 @@ if __name__ == "__main__":
         update_metrics = agent.update(batch)
         log_update_metrics(update_metrics, eps, glob="update_metrics", type = "minibatches")
 
-    save_agent(agent, config.save_dir, mod = "_final")
-    save_config(config, config.save_dir)
+    #save_agent(agent, config.save_dir, mod = "_final")
+    #save_config(config, config.save_dir)
 
     env.reset()
     rollout = gen_rollout(env, agent, length=1000)

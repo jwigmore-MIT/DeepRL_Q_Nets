@@ -347,16 +347,19 @@ class LTAPPOAgent:
         # pg_loss2 = -mb_advantages  * torch.clamp(ratio, 1.0 - self.clip_coef, 1.0 + self.clip_coef) #* (1-mb_interventions) # clipped loss
         pg_loss1 = -mb_advantages * ratio * (1-mb_interventions) # unclipped loss
         pg_loss2 = -mb_advantages * torch.clamp(ratio, 1.0 - self.clip_coef, 1.0 + self.clip_coef) * (1-mb_interventions) # clipped loss
-
-        imit_loss = ((result["actor_means"] - mb_actions) * mb_interventions).pow(2)
+        if self.actor._get_name() == "JSQDiscreteActor":
+            mlp_actions = mb_actions[:,: mb_actions.shape[1]//2]
+            imit_loss = ((result["actor_means"] - mlp_actions) * mb_interventions).pow(2)
+        else:
+            imit_loss = ((result["actor_means"] - mb_actions) * mb_interventions).pow(2)
         int_loss = mb_interventions.sum()
 
         kl_loss = self.kl_coef * approx_kl
         entropy_loss = -self.ent_coef * result["entropy"].mean()  # fix this
         actor_loss = self.pg_coef*torch.max(pg_loss1, pg_loss2).mean()  \
                      + self.imit_coef * imit_loss.mean()\
-                     + self.int_coef * int_loss\
-                     + kl_loss + entropy_loss
+                     + kl_loss + entropy_loss #\
+                        # + self.int_coef * int_loss # We might not actually want to do this because then we are double counting the loss due to interventions as they are included in the GAE estimation
         if actor_loss.abs().mean().item() > 1e4:
             print("actor_loss is too high")
             Exception("actor_loss is too high")
@@ -384,8 +387,8 @@ class LTAPPOAgent:
         result["actor_loss_unclipped"] = pg_loss1.mean().item()
         result["stop_update"] = float(not update)
         result["pg_magnitude"] = pg_magnitude.item()
-        result["imit_loss"] = imit_loss.mean().item()
-        result["int_loss"] = int_loss.item()
+        result["imit_loss"] = self.imit_coef * imit_loss.mean().item()
+        result["int_loss"] = self.int_coef * int_loss.item()
 
 
         return result

@@ -41,7 +41,7 @@ agent:
       hidden_layers: 2
   safety:
     safe_policy: "BP"
-    trigger_state: 7
+    trigger_state: 14
     args:
       M: "R"
   critic:
@@ -84,7 +84,7 @@ wandb:
 
 train:
   num_episodes: 1000
-  batch_size: 256
+  batch_size: 512
   reset: false
 
 eval:

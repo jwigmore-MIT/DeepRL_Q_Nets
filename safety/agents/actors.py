@@ -3,6 +3,7 @@ import torch
 from safety.agents.utils import layer_init, mlp_init
 import numpy as np
 from typing import List, Tuple
+from copy import deepcopy
 
 class MultiDiscreteActor(nn.Module):
 
@@ -80,6 +81,65 @@ class MultiDiscreteActor(nn.Module):
                 samples.append(categorical.sample())
         return torch.stack(samples)
 
+
+class JSQDiscreteActor(nn.Module):
+
+    def __init__(self, state_dim: int,
+                 action_dim: int, #N
+                 hidden_dim: int,
+                 hidden_layers = 2,
+                 activation = "tanh"):
+
+        super().__init__()
+
+        self._mlp = mlp_init(state_dim, state_dim-2, hidden_layers, hidden_dim, activation)
+        self._action_format = self.generate_action_format(action_dim)
+
+    def generate_action_format(self, action_dim):
+        action_format = np.ones(action_dim)
+        action_format[:action_dim//2] = 0
+        return action_format
+
+    def get_mlp_action_from_vector(self, action):
+        action = action - self._action_format
+        return action.argmax(dim = 1)
+
+    def generate_action_from_mlp(self, mlp_action):
+        action = deepcopy(self._action_format)
+        action[mlp_action] = 1
+        return action
+
+
+    def _get_policy(self, state):
+        logits = self._mlp(state)
+        return torch.distributions.Categorical(logits=logits)
+
+
+    def log_prob(self, state, action, extra = False):
+        # action will be twice the size of the actual action space
+        policy = self._get_policy(state)
+        mlp_action = self.get_mlp_action_from_vector(action)
+        log_prob = policy.log_prob(mlp_action)
+
+        if not extra:
+            return log_prob
+        else:
+            policy_means = policy.probs
+            policy_stds = torch.zeros_like(policy_means)
+            entropy = policy.entropy().sum(-1)
+            return {"log_probs": log_prob,
+                    "actor_means": policy_means,
+                    "actor_stds": policy_stds,
+                    "entropy": entropy}
+
+    def act(self, state, device = "cpu"):
+        state_t = torch.tensor(state[None], dtype=torch.float32, device=device)
+        policy = self._get_policy(state_t)
+        mlp_action = policy.sample()
+        action = self.generate_action_from_mlp(int(mlp_action))
+
+
+        return action
 
 class BetaActor(nn.Module):
 
@@ -498,6 +558,10 @@ def init_actor(config, mid, action_ranges):
             {"params": actor._mlp.parameters(), 'lr': config.agent.actor.learning_rate},
             {"params": actor._log_std, 'lr': config.agent.actor.std_learning_rate},
         ])
+    elif config.agent.actor.type == "JSQDiscreteActor":
+        actor = JSQDiscreteActor(config.env.flat_state_dim, config.env.flat_action_dim,
+                              **config.agent.actor.kwargs.toDict())
+        actor_optim = torch.optim.Adam(actor.parameters(), lr=config.agent.actor.learning_rate)
     else:
         actor = None
         # Throw error
