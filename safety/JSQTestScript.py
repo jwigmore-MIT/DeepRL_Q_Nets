@@ -15,7 +15,7 @@ import pickle
 
 # Custom imports
 from safety.buffers import Buffer
-from NonDRLPolicies.Backpressure import MCMHBackPressurePolicy
+from NonDRLPolicies.StaticPolicies import JoinTheShortestQueuePolicy
 from safety.roller import gen_rollout, log_rollouts
 from safety.wandb_funcs import wandb_init, load_agent_wandb
 from safety.loggers import log_rollouts, log_update_metrics, log_rollout_summary
@@ -32,14 +32,14 @@ from safety.utils import visualize_buffer
 if __name__ == "__main__":
 
     # === Init Config === #
-    config_file = "Backpressure/BPR_Test1.yaml"
+    config_file = "Backpressure/JSQ_Test1.yaml"
     config = parse_config(config_file, run_type="TEST")
 
     # === Init Environment === #
     env = generate_env(config)
 
     # ===Load Agent ===#
-    agent = MCMHBackPressurePolicy(env, **config.agent.BP_args.toDict())
+    agent = JoinTheShortestQueuePolicy(env)
 
     # init wandb
     wandb_init(config)

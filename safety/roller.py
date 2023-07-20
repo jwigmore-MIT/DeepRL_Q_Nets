@@ -48,7 +48,7 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", pbar_desc = "Generati
             next_obs[t], rewards[t], terminals[t], timeouts[t], info = env.step(actions[t])
             next_nn_obs[t] = agent.obs_normalizer.normalize(next_obs[t], update=True)
 
-        elif agent.__str__() == 'MCMHBackPressurePolicy()':
+        elif agent.__str__() == 'MCMHBackPressurePolicy()' or agent.__str__() == 'JoinTheShortestQueuePolicy':
             # BP Agent
             actions[t] = agent.act(obs[t], device)
             interventions[t] = True

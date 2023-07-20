@@ -1,0 +1,49 @@
+{
+  "problem_instance": {
+    "name": "TwoTriangle1",
+    "notes": "",
+    "nodes": "[1, 2, 3, 4, 5, 6, 7, 8, 9]",
+    "bidirectional": true,
+    "links": "[[1,2], [1,4], [2,3], [2,5], [3,6], [4,5], [4,7], [5,6], [5,8], [6,9], [7,8], [8,9]]",
+    "classes": {
+      "1": {
+        "source": 1,
+        "destination": 9,
+        "arrival": 2,
+        "probability": 0.8
+      },
+      "2": {
+        "source": 3,
+        "destination": 7,
+        "arrival": 1,
+        "probability": 0.8
+      },
+      "3": {
+        "source": 7,
+        "destination": 3,
+        "arrival": 4,
+        "probability": 0.4
+      },
+      "4": {
+        "source": 9,
+        "destination": 1,
+        "arrival": 2,
+        "probability": 0.6
+      }
+    },
+    "capacities": {
+      "(0,0)": {
+        "capacity": 2,
+        "probability": 1
+      },
+      "(2,5)" : {
+        "capacity": 1,
+        "probability": 1
+      },
+      "(5,8)" : {
+        "capacity": 1,
+        "probability": 1
+      }
+    }
+  }
+}

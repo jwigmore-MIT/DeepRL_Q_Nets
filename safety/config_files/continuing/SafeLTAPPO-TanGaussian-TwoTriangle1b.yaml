@@ -1,7 +1,7 @@
 ---
 config:
+notes: "No imitation loss"
 root_dir: ~
-notes: "Actor: tanh, 2 hidden layers. Critic: tanh, 2 hidden layers, 128 hidden dim. No imitation"
 seed: 5031997
 device: "cpu"
 deterministic_torch: true
@@ -19,7 +19,7 @@ buffer:
 normalizers:
   obs:
     type: Fixed
-    norm_factor: 20
+    norm_factor: 50
     eps: 1.0e-6
   target:
     update_rate: 0.2
@@ -41,7 +41,7 @@ agent:
       hidden_layers: 2
   safety:
     safe_policy: "BP"
-    trigger_state: 20
+    trigger_state: 400
     args:
       M: "R"
   critic:
@@ -50,7 +50,6 @@ agent:
         hidden_dim: 128
         activation: "tanh"
         hidden_layers: 2
-  n_epochs: 10
   kwargs:
     update_epochs: 10 # number of updates to perform per batch
     minibatches: 4 # number of minibatches to break the data up into
@@ -64,21 +63,21 @@ agent:
     grad_clip: 10
     value_clip: 1
     vf_coef: 0.5
-    imit_coef: 0.0
+    imit_coef: 1.0
     pg_coef: 10.0
     int_coef: 0.0
 
 
 env:
-    env_json_path: "/JSON/Environment/Env1/Env1b.json"
+    env_json_path: "/JSON/Environment/TwoTriangle/TwoTriangle1b.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false
       record_stats: true
-      scale_reward: -50.0
+      scale_reward: -400.0
 
 wandb:
-    project: "ArchitectureTesting"
+    project: "ActionDistTesting"
     group: ~
 
 

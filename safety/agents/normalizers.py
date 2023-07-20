@@ -68,7 +68,7 @@ class FixedNormalizer:
 
     def normalize(self, obs, update = True):
         new_obs =  2* obs/(self.norm_factor) - 1
-        return new_obs.clip(-1,1)
+        return new_obs
 
 class ActionScaler:
     """

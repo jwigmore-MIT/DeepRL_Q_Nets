@@ -106,4 +106,65 @@ class DiamondOptimalPolicy(nn.Module):
         return self.optimal_action
 
 
+class JoinTheShortestQueuePolicy:
 
+    def __init__(self, env):
+        self.env = deepcopy(env)
+        self.links = env.get_links()
+
+    def __str__(self):
+        return "JoinTheShortestQueuePolicy"
+    def act(self, state: dict, device=None):
+        return self.forward(state)
+    def forward(self, state: dict, old_state=None):
+        d_state = self.env.unflatten_obs(state.reshape(-1,1)) # state as dictionary
+
+        # Convert Queues to integer based keys
+        Q = keys_to_ints(d_state['Q'])
+        # Get all queue sizes except the source Q[1] and the sink Q[Q.__len__()]
+        Qs = np.array([Q[i][1] for i in range(2,Q.__len__())])
+        min_Q = np.argmin([Qs]) + 2
+        # Create action as dictionary
+        f = self.env.get_action_format()
+        for link in f.keys():
+            if link[0] == 1:
+                if link[1] == min_Q:
+                    f[link][1] = min(1, int(Q[link[0]][1]))
+            else:
+                f[link][1] = min(1, int(Q[link[0]][1]))
+
+        flat_f = self.env.flatten_action(f)
+        return flat_f[0,:]
+# class ShortestPath:
+#
+#     def __init__(self, env):
+#         self.env = deepcopy(env)
+#         self.links = env.get_links()
+#         self.action_format = env.get_action_format()
+#         self.shortest_path = self.get_shortest_path()
+#         self.shortest_path_action = self.get_shortest_path_action()
+#         self.shortest_path_action = self.env.flatten_action(self.shortest_path_action)
+#
+#     def get_shortest_path(self):
+#         # Shortest path
+#         shortest_path = nx.shortest_path(self.links, source=1, target=16, weight='weight')
+#         shortest_path = list(shortest_path)
+#         return shortest_path
+#
+#     def get_shortest_path_action(self):
+#         shortest_path_action = []
+#         for i in range(len(self.shortest_path)-1):
+#             shortest_path_action.append(self.action_format[self.shortest_path[i], self.shortest_path[i+1]])
+#         return shortest_path_action
+#
+#     def forward(self, state: dict, old_state=None):
+#         return self._forward()
+#
+#     def act(self, state: dict, old_state=None):
+#         return self._forward()
+#
+#     def _forward(self):
+#         return self.shortest_path_action
+#     self.env = deepcopy(env)
+#     self.links = env.get_links()
+#     self.action_format = env.get_action_format()
