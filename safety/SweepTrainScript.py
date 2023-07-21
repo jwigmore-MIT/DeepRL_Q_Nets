@@ -28,6 +28,49 @@ from safety.agents.normalizers import MovingNormalizer, CriticTargetScaler, Fixe
 from safety.agents.safe_agents import init_safe_agent
 
 
+sweep_config = {
+    'method': 'bayes',
+    'name': 'sweep',
+    'metric': {
+        'name': 'lta_backlog',
+        'goal': 'minimize'
+    },
+    'parameters': {
+        'actor_lr': {'max': 1e-3, 'min': 1e-5},
+        'critic_lr': {'max': 1e-3, 'min': 1e-5},
+        'alpha': {'max': 0.5, 'min': 0.0},
+        'nu': {'values': [1, 0.5, 0.25, 0.1, 0]},
+        'gae_lambda': {'max': 0.99, 'min': 0.25},
+        'kl_target': {'max': 1, 'min': 0.001},
+        'batch_size': {'values': [128, 256, 512]}
+    }
+}
+
+
+def run_sweep(sweep_config, base_config_file):
+    # get init config
+    config = parse_config(base_config_file)
+
+    # Modify config for sweep
+    config.agent.actor.learning_rate = sweep_config["actor_lr"]
+    config.agent.critic.learning_rate = sweep_config["critic_lr"]
+    config.agent.kwargs.alpha = sweep_config["alpha"]
+    config.agent.kwargs.nu = sweep_config["nu"]
+    config.agent.kwargs.gae_lambda = sweep_config["gae_lambda"]
+    config.agent.kwargs.kl_target = sweep_config["kl_target"]
+    config.train.batch_size = sweep_config["batch_size"]
+
+
+
+    return lta_backlog
+
+def run_trial(config):
+
+def main():
+    wandb.init(project='my-first-sweep')
+    lta_reward = run_sweep(wandb.config)
+    wandb.log({'lta_reward': lta_reward})
+
 
 if __name__ == "__main__":
 
@@ -37,7 +80,7 @@ if __name__ == "__main__":
     #config_file = "continuing/SafeLTAPPO-Gaussian-Env1b.yaml"
     #config_file = "PPO-TanGaussian-Env1b.yaml"
     #config_file = "SafePPO-TanGaussian-Env1b.yaml"
-    config_file = "continuing/SafeLTAPPO-Discrete-JSQN4AS.yaml"
+    config_file = "continuing/SafeLTAPPO-Discrete-JSQN4.yaml"
     config = parse_config(config_file)
 
     # === Init Environment === #

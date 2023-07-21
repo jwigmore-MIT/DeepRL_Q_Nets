@@ -94,6 +94,7 @@ class JSQDiscreteActor(nn.Module):
 
         self._mlp = mlp_init(state_dim, state_dim-2, hidden_layers, hidden_dim, activation)
         self._action_format = self.generate_action_format(action_dim)
+        self.train = True
 
     def generate_action_format(self, action_dim):
         action_format = np.ones(action_dim)
@@ -126,7 +127,7 @@ class JSQDiscreteActor(nn.Module):
         else:
             policy_means = policy.probs
             policy_stds = torch.zeros_like(policy_means)
-            entropy = policy.entropy().sum(-1)
+            entropy = policy.entropy()
             return {"log_probs": log_prob,
                     "actor_means": policy_means,
                     "actor_stds": policy_stds,
@@ -135,7 +136,10 @@ class JSQDiscreteActor(nn.Module):
     def act(self, state, device = "cpu"):
         state_t = torch.tensor(state[None], dtype=torch.float32, device=device)
         policy = self._get_policy(state_t)
-        mlp_action = policy.sample()
+        if self.training:
+            mlp_action = policy.sample()
+        else:
+            mlp_action = policy.mode
         action = self.generate_action_from_mlp(int(mlp_action))
 
 
@@ -463,7 +467,7 @@ class TanGaussianActor(nn.Module):
     def act(self, state: np.ndarray, device: str) -> np.ndarray:
         state_t = torch.tensor(state[None], dtype=torch.float32, device=device)
         policy = self._get_policy(state_t)
-        if self._mlp.training:
+        if self._mlp.training or self.train:
             x_t = policy.rsample()
         else:
             x_t = policy.mean

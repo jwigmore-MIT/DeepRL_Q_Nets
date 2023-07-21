@@ -19,8 +19,11 @@ class LTAPPOAgent:
                  update_epochs: int = 10,
                  minibatches: int = 1,
                  shuffle_mb: bool = True,
+                 recompute_adv: bool = True,
+                 critic_first: bool = True,
                  alpha: float = 0.1,
                  nu: float = 1.0,
+                 gamma: float = 1.0,
                  gae_lambda: float = 0.95,
                  clip_coef: float = 0.25,
                  kl_coef: float = 0.0,  # Beta in PPO paper
@@ -46,6 +49,8 @@ class LTAPPOAgent:
 
 
         # Update step parameters
+        self.critic_first = critic_first
+        self.recompute_adv = recompute_adv
         self.update_epochs = update_epochs
         self.minibatches = minibatches
         self.shuffle_mb = shuffle_mb
@@ -53,9 +58,9 @@ class LTAPPOAgent:
         # For value/advantage estimation
         self.alpha = alpha # LTA estimate update rate
         self.nu = nu # Average Value Constraint Coefficient
-        self.eta = None # LTA estimate
-        self.b = None
-        self.gamma = 1
+        self.eta = 0 # LTA estimate
+        self.b = 0
+        self.gamma = gamma
         self.gae_lambda = gae_lambda
 
         self.clip_coef = clip_coef
@@ -96,8 +101,7 @@ class LTAPPOAgent:
         # update the eta estimate
         self.update_b_eta(batch["rewards"], batch["nn_obs"])
 
-        for i in range(self.update_epochs):
-            # Compute the
+        if not self.recompute_adv:
             with torch.no_grad():
                 # modifies the rewards to include the interventions
                 b_rewards = batch['rewards'] - self.int_coef * batch['interventions'] # rewards + interventions
@@ -107,6 +111,19 @@ class LTAPPOAgent:
                 #b_true_values = self.get_true_value(b_obs) # true values based on the current critic and target scaler // DONT NEED
                 b_targets, b_advantages = self.compute_targets(b_rewards, batch['nn_obs'], next_nn_obs, batch['dones'])
                 # targets should be normalized, advantages should not be normalized
+
+        for i in range(self.update_epochs):
+            # Compute the
+            if self.recompute_adv:
+                with torch.no_grad():
+                    # modifies the rewards to include the interventions
+                    b_rewards = batch['rewards'] - self.int_coef * batch['interventions'] # rewards + interventions
+                    b_obs = batch['nn_obs'] # observations fed into nn
+                    b_log_probs = self.actor.log_prob(b_obs, batch['actions']) # log probs of actions taken in the batch
+                    b_actions = batch['actions'] # actions takin in batch
+                    #b_true_values = self.get_true_value(b_obs) # true values based on the current critic and target scaler // DONT NEED
+                    b_targets, b_advantages = self.compute_targets(b_rewards, batch['nn_obs'], next_nn_obs, batch['dones'])
+                    # targets should be normalized, advantages should not be normalized
 
             # get indices
             b_inds = np.arange(len(batch['nn_obs']))
@@ -127,8 +144,13 @@ class LTAPPOAgent:
                 # mb_true_values = b_true_values[mb_inds] # DONT NEED
 
                 # update the critic
-                mb_critic_results = self.update_critic_mb(mb_obs, mb_targets)
-                mb_actor_results = self.update_actor_mb(mb_obs, mb_actions, mb_log_probs, mb_advantages, mb_interventions)
+                if self.critic_first:
+                    mb_critic_results = self.update_critic_mb(mb_obs, mb_targets)
+                    mb_actor_results = self.update_actor_mb(mb_obs, mb_actions, mb_log_probs, mb_advantages, mb_interventions)
+                else:
+                    mb_actor_results = self.update_actor_mb(mb_obs, mb_actions, mb_log_probs, mb_advantages, mb_interventions)
+                    mb_critic_results = self.update_critic_mb(mb_obs, mb_targets)
+
 
                 # process results for wandb logging
                 for key, value in mb_critic_results.items():
@@ -197,7 +219,7 @@ class LTAPPOAgent:
         new_values = self.get_nn_value(mb_obs)
         new_values = new_values
         bias_factor = self.b*self.nu
-        critic_loss = self.compute_critic_loss(new_values, mb_targets - bias_factor)
+        critic_loss = self.compute_critic_loss(new_values, mb_targets, bias_factor)
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
@@ -242,47 +264,48 @@ class LTAPPOAgent:
                 "b": self.b}
 
 
-    def update_critic(self, batch: dict, b_targets: torch.Tensor):
-        # Get current critic value estimates and compute error from targets based on this
-        nn_values = self.get_nn_value(batch['n_obs'])
-        critic_loss = self.compute_critic_loss(nn_values, b_targets)
-        self.critic_optimizer.zero_grad()
-        critic_loss.backward()
-        self.critic_optimizer.step()
-
-        # === Logging === #
-        # Compute errors
-        critic_errors = (nn_values-b_targets)
-
-        if self.target_scaler is not None:
-            true_targets = self.target_scaler.unnormalize(b_targets)
-            true_values = self.target_scaler.unnormalize(nn_values)
-            true_errors = true_values - true_targets
-            explained_variance = 1 - (torch.var(true_errors) / torch.var(true_targets))
-        else:
-            true_errors = critic_errors
-            explained_variance = 1 - (torch.var(critic_errors) / torch.var(b_targets))
-
-        max_critic_error = true_errors.max().item()
-        min_critic_error = true_errors.min().item()
-        if abs(max_critic_error) > abs(min_critic_error):
-            max_critic_dev = max_critic_error
-        else:
-            max_critic_dev = min_critic_error
-        return {"critic_loss": critic_loss.item(),
-                "max_critic_dev: ": max_critic_dev,
-                "avg_critic_error: ": critic_errors.abs().mean().item(),
-                "avg_critic_true_error: ": true_errors.abs().mean().item(),
-                "explained_variance": explained_variance.item(),
-                "target_mean": self.target_scaler.target_mean,
-                "target_std": self.target_scaler.target_std,
-                "nn_values": nn_values.mean().item()}
-
-
+    # def update_critic(self, batch: dict, b_targets: torch.Tensor):
+    #     # Get current critic value estimates and compute error from targets based on this
+    #     nn_values = self.get_nn_value(batch['n_obs'])
+    #     critic_loss = self.compute_critic_loss(nn_values, b_targets)
+    #     self.critic_optimizer.zero_grad()
+    #     critic_loss.backward()
+    #     self.critic_optimizer.step()
+    #
+    #     # === Logging === #
+    #     # Compute errors
+    #     critic_errors = (nn_values-b_targets)
+    #
+    #     if self.target_scaler is not None:
+    #         true_targets = self.target_scaler.unnormalize(b_targets)
+    #         true_values = self.target_scaler.unnormalize(nn_values)
+    #         true_errors = true_values - true_targets
+    #         explained_variance = 1 - (torch.var(true_errors) / torch.var(true_targets))
+    #     else:
+    #         true_errors = critic_errors
+    #         explained_variance = 1 - (torch.var(critic_errors) / torch.var(b_targets))
+    #
+    #     max_critic_error = true_errors.max().item()
+    #     min_critic_error = true_errors.min().item()
+    #     if abs(max_critic_error) > abs(min_critic_error):
+    #         max_critic_dev = max_critic_error
+    #     else:
+    #         max_critic_dev = min_critic_error
+    #     return {"critic_loss": critic_loss.item(),
+    #             "max_critic_dev: ": max_critic_dev,
+    #             "avg_critic_error: ": critic_errors.abs().mean().item(),
+    #             "avg_critic_true_error: ": true_errors.abs().mean().item(),
+    #             "explained_variance": explained_variance.item(),
+    #             "target_mean": self.target_scaler.target_mean,
+    #             "target_std": self.target_scaler.target_std,
+    #             "nn_values": nn_values.mean().item()}
 
 
-    def compute_critic_loss(self, nn_values, b_targets):
-        loss = torch.nn.functional.mse_loss(nn_values , b_targets)
+
+
+    def compute_critic_loss(self, nn_values, b_targets, bias_factor):
+        #loss = torch.nn.functional.mse_loss(nn_values , b_targets)
+        loss = 0.5 * (b_targets - bias_factor - nn_values).pow(2).mean()
         return loss
 
 
@@ -301,19 +324,17 @@ class LTAPPOAgent:
                 adv[t] = last_gae_lam =  delta +  self.gamma * self.gae_lambda* last_gae_lam
         return adv
 
+
+
     def update_b_eta(self, rewards, nn_obs):
         # updating eta
-        if self.eta is None:
-            self.eta = rewards.mean().item()
-        else:
-            self.eta = self.eta * (1-self.alpha) + rewards.mean().item() * (self.alpha)
+
+        self.eta = self.eta * (1-self.alpha) + rewards.mean().item() * (self.alpha)
         with torch.no_grad():
             # updating b
             values = self.get_true_value(nn_obs)  # nn_obs = batch["nn_obs"]
-            if self.b is None:
-                self.b = values.mean()
-            else:
-                self.b = self.b * (1 - self.alpha) + values.mean() * self.alpha
+
+            self.b = self.b * (1 - self.alpha) + values.mean() * self.alpha
 
 
 
@@ -395,74 +416,74 @@ class LTAPPOAgent:
 
 
 
-    def update_actor(self, batch: dict, log_probs_old: torch.Tensor):
-
-        # flag of whether or not to end updates to the actor
-        continue_updates = True
-        results = {}
-        with torch.no_grad():
-            nn_values = self.get_nn_value(batch['n_obs'])
-            b_values = self.unnormalize_value(nn_values)
-
-            nn_next_value = self.get_nn_value(batch['next_n_obs'][-1])
-            b_next_value = self.unnormalize_value(nn_next_value)
-
-            # Compute advantages
-            rewards = torch.Tensor(batch['rewards'])
-            advantages = self.compute_GAE(rewards, b_values, b_next_value, batch['dones'])
-
-        result = self.actor.log_prob(batch["obs"], batch["actions"], extra=True)
-        log_ratio = (result["log_probs"] - log_probs_old)
-        ratio = log_ratio.exp()
-
-        with torch.no_grad():
-            clip_frac = ((ratio - 1.0).abs() > self.clip_coef).float().mean().item()
-        if self.kl_coef == 0:
-            with torch.no_grad():
-                approx_kl = -log_ratio.mean()
-        else:
-            approx_kl = -log_ratio.mean()
-        if self.kl_target is not None:
-            if approx_kl > self.kl_target:
-                # if the KL is too high, we stop updating the policy
-                update = False
-                #result["stop_update"] = True
-
-
-        # compute loss
-        pg_loss1 = -advantages * ratio # unclipped loss
-        pg_loss2 = -advantages * torch.clamp(ratio, 1.0 - self.clip_coef, 1.0 + self.clip_coef) # clipped loss
-        kl_loss = self.kl_coef * approx_kl
-        entropy_loss = self.ent_coef * result["entropy"].mean() # fix this
-        actor_loss = torch.max(pg_loss1, pg_loss2).mean() + kl_loss + entropy_loss
-        if update:
-            self.actor_optimizer.zero_grad()
-            actor_loss.backward()
-            if self.grad_clip is not None:
-                torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)
-            self.actor_optimizer.step()
-            pg_magnitude = torch.norm(torch.stack([torch.norm(p.grad.detach(), 2.0) for p in list(self.actor.parameters())]), 2.0)
-
-            #result["stop_update"] = False
-
-        else:
-            pg_magnitude = torch.Tensor([0])
-        for key in result.keys():
-            result[key] = result[key].mean().item()
-        result["actor_loss"] = actor_loss.item()
-        result["advantages"] = advantages.mean().item()
-        result["approx_kl"] = approx_kl.item()
-        result["entropy_loss"] = entropy_loss.item()
-        result["kl_loss"] = kl_loss.item()
-        result["clip_frac"] = clip_frac
-        result["actor_loss_unclipped"] = pg_loss1.mean().item()
-        result["stop_update"] = not update
-        result["pg_magnitude"] = pg_magnitude.item()
-        if pg_magnitude.item() > 1e6:
-            print("pg_magnitude is too high")
-            Exception("pg_magnitude is too high")
-
-        return result
+    # def update_actor(self, batch: dict, log_probs_old: torch.Tensor):
+    #
+    #     # flag of whether or not to end updates to the actor
+    #     continue_updates = True
+    #     results = {}
+    #     with torch.no_grad():
+    #         nn_values = self.get_nn_value(batch['n_obs'])
+    #         b_values = self.unnormalize_value(nn_values)
+    #
+    #         nn_next_value = self.get_nn_value(batch['next_n_obs'][-1])
+    #         b_next_value = self.unnormalize_value(nn_next_value)
+    #
+    #         # Compute advantages
+    #         rewards = torch.Tensor(batch['rewards'])
+    #         advantages = self.compute_GAE(rewards, b_values, b_next_value, batch['dones'])
+    #
+    #     result = self.actor.log_prob(batch["obs"], batch["actions"], extra=True)
+    #     log_ratio = (result["log_probs"] - log_probs_old)
+    #     ratio = log_ratio.exp()
+    #
+    #     with torch.no_grad():
+    #         clip_frac = ((ratio - 1.0).abs() > self.clip_coef).float().mean().item()
+    #     if self.kl_coef == 0:
+    #         with torch.no_grad():
+    #             approx_kl = -log_ratio.mean()
+    #     else:
+    #         approx_kl = -log_ratio.mean()
+    #     if self.kl_target is not None:
+    #         if approx_kl > self.kl_target:
+    #             # if the KL is too high, we stop updating the policy
+    #             update = False
+    #             #result["stop_update"] = True
+    #
+    #
+    #     # compute loss
+    #     pg_loss1 = -advantages * ratio # unclipped loss
+    #     pg_loss2 = -advantages * torch.clamp(ratio, 1.0 - self.clip_coef, 1.0 + self.clip_coef) # clipped loss
+    #     kl_loss = self.kl_coef * approx_kl
+    #     entropy_loss = self.ent_coef * result["entropy"].mean() # fix this
+    #     actor_loss = torch.max(pg_loss1, pg_loss2).mean() + kl_loss + entropy_loss
+    #     if update:
+    #         self.actor_optimizer.zero_grad()
+    #         actor_loss.backward()
+    #         if self.grad_clip is not None:
+    #             torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_clip)
+    #         self.actor_optimizer.step()
+    #         pg_magnitude = torch.norm(torch.stack([torch.norm(p.grad.detach(), 2.0) for p in list(self.actor.parameters())]), 2.0)
+    #
+    #         #result["stop_update"] = False
+    #
+    #     else:
+    #         pg_magnitude = torch.Tensor([0])
+    #     for key in result.keys():
+    #         result[key] = result[key].mean().item()
+    #     result["actor_loss"] = actor_loss.item()
+    #     result["advantages"] = advantages.mean().item()
+    #     result["approx_kl"] = approx_kl.item()
+    #     result["entropy_loss"] = entropy_loss.item()
+    #     result["kl_loss"] = kl_loss.item()
+    #     result["clip_frac"] = clip_frac
+    #     result["actor_loss_unclipped"] = pg_loss1.mean().item()
+    #     result["stop_update"] = not update
+    #     result["pg_magnitude"] = pg_magnitude.item()
+    #     if pg_magnitude.item() > 1e6:
+    #         print("pg_magnitude is too high")
+    #         Exception("pg_magnitude is too high")
+    #
+    #     return result
 
     def get_log_prob(self, obs, action):
         return self.actor.log_prob(obs, action)

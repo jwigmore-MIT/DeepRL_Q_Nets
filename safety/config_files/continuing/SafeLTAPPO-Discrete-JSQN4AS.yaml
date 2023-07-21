@@ -32,7 +32,7 @@ agent:
   lta_agent: true
   actor:
     type: "JSQDiscreteActor"
-    learning_rate: 3.0e-3
+    learning_rate: 2.0e-4
     std_learning_rate: 3.0e-03
     kwargs:
       hidden_dim: 64
@@ -40,14 +40,14 @@ agent:
       hidden_layers: 2
   safety:
     safe_policy: "JSQ"
-    trigger_state: 100
+    trigger_state: 20
     mod: "prob"
     mod_args:
       omega: 0.5
     args:
       M: "R"
   critic:
-    learning_rate: 3.0e-03
+    learning_rate: 1.0e-4
     kwargs:
         hidden_dim: 128
         activation: "tanh"
@@ -55,31 +55,33 @@ agent:
   n_epochs: 10
   kwargs:
     critic_first: false
-    recompute_adv: false
+    recompute_adv: true
     update_epochs: 10 # number of updates to perform per batch
     minibatches: 4 # number of minibatches to break the data up into
-    alpha: 0.5
-    nu: 1.0
-    gae_lambda: 0.95
-    clip_coef: 0.2
+    shuffle_mb: true
+    alpha: 0.0
+    nu: 0
+    gamma: 0.95
+    gae_lambda: 0.8
+    clip_coef: 0.1
     kl_coef: 0.0
     ent_coef: 0.0
-    kl_target: 1
+    kl_target: 0.01
     grad_clip: 10
     value_clip: 1
     vf_coef: 0.5
-    imit_coef: 1.0
+    imit_coef: 0.0
     pg_coef: 10.0
     int_coef: 0.0
 
 
 env:
-    env_json_path: "/JSON/Environment/ServerAllocation/N2.json"
+    env_json_path: "/JSON/Environment/ServerAllocation/N4AS.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false
       record_stats: true
-      scale_reward: -20.0
+      scale_reward: -40.0
 
 wandb:
     project: "JoinTheShortestQueue"
@@ -87,8 +89,8 @@ wandb:
 
 
 train:
-  num_episodes: 500
-  batch_size: 256
+  num_episodes: 5000
+  batch_size: 1024
   reset: false
 
 eval:

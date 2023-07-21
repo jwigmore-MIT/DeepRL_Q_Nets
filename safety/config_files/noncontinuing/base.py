@@ -33,7 +33,7 @@ class Test:
 
 @dataclass
 class Config:
-    root_dir: str = "../"
+    root_dir: str = "../../"
     seed: int = 5031997
     device: str = "cpu"
     deterministic_torch: bool = True

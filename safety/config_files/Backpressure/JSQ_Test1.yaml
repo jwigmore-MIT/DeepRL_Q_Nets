@@ -20,7 +20,7 @@ agent:
 
 
 env:
-    env_json_path: "/JSON/Environment/ServerAllocation/N2.json"
+    env_json_path: "/JSON/Environment/ServerAllocation/N4AS.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false

@@ -91,6 +91,13 @@ class SafeAgent(nn.Module):
             self.obs_normalizer = neural_agent.obs_normalizer
         self.force_nn = False # to make it so the agent uses the neural agent even if it is in an unsafe state
 
+    def change_mode(self, mode = 'train'):
+        if mode == 'train':
+            self.neural_agent.actor.training = True
+        elif mode == 'test':
+            self.neural_agent.actor.training = False
+        else:
+            Exception(f"mode ({mode}) does not exist")
     def check_safety(self, state):
         # In unsafe state, return False, otherwise True
         return self.safe_actor.check_safety(state)

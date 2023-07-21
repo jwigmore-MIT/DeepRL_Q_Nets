@@ -8,6 +8,8 @@ import random
 import pickle
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+import plotly.io as pio
+pio.renderers.default = "browser"
 from plotly.subplots import make_subplots
 import sys
 
