@@ -32,7 +32,7 @@ agent:
   lta_agent: true
   actor:
     type: "JSQDiscreteActor"
-    learning_rate: 2.0e-4
+    learning_rate: 3.0e-4
     std_learning_rate: 3.0e-03
     kwargs:
       hidden_dim: 64
@@ -47,7 +47,7 @@ agent:
     args:
       M: "R"
   critic:
-    learning_rate: 1.0e-4
+    learning_rate: 3.0e-3
     kwargs:
         hidden_dim: 128
         activation: "tanh"
@@ -62,8 +62,8 @@ agent:
     alpha: 0.0
     nu: 0
     gamma: 0.95
-    gae_lambda: 0.8
-    clip_coef: 0.1
+    gae_lambda: 0.95
+    clip_coef: 0.2
     kl_coef: 0.0
     ent_coef: 0.0
     kl_target: 0.01
@@ -71,8 +71,8 @@ agent:
     value_clip: 1
     vf_coef: 0.5
     imit_coef: 0.0
-    pg_coef: 10.0
-    int_coef: 0.0
+    pg_coef: 1.0
+    int_coef: 10.0
 
 
 env:
@@ -90,7 +90,7 @@ wandb:
 
 train:
   num_episodes: 5000
-  batch_size: 1024
+  batch_size: 512
   reset: false
 
 eval:

@@ -121,6 +121,10 @@ def generate_env(config, max_steps = None):
     if hasattr(config.env.wrappers, "scale_reward"):
         if isinstance(config.env.wrappers.scale_reward, float) or isinstance(config.env.wrappers.scale_reward, int):
             env = gym.wrappers.TransformReward(env, lambda x: (x- config.env.wrappers.scale_reward) / (-config.env.wrappers.scale_reward) * (2) - 1)
+    if hasattr(config.env.wrappers, "norm_reward"):
+        # Normalize rewards by the episode length
+        if isinstance(config.env.wrappers.norm_reward, float) or isinstance(config.env.wrappers.norm_reward, int):
+            env = gym.wrappers.TransformReward(env, lambda x: x/config.env.wrappers.norm_reward)
         # r \in [-50,0] -> r \in [-1,1] or r \in [a,b] -> r' \in [c,d]
         # r' = (r - a)/(b-a) * (d-c) + c
 

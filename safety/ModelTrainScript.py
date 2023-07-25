@@ -16,7 +16,7 @@ from tqdm import tqdm
 from safety.buffers import Buffer
 from NonDRLPolicies.Backpressure import MCMHBackPressurePolicy
 from safety.roller import gen_rollout, log_rollouts
-from safety.wandb_funcs import wandb_init, save_agent_wandb
+from safety.wandb_funcs import wandb_init, save_agent_wandb, load_agent_wandb
 from safety.loggers import log_rollouts, log_update_metrics, log_rollout_summary
 from safety.utils import *
 from Environments.MCMH_tools import generate_env
@@ -37,7 +37,8 @@ if __name__ == "__main__":
     #config_file = "continuing/SafeLTAPPO-Gaussian-Env1b.yaml"
     #config_file = "PPO-TanGaussian-Env1b.yaml"
     #config_file = "SafePPO-TanGaussian-Env1b.yaml"
-    config_file = "continuing/SafeLTAPPO-Discrete-JSQN4AS.yaml"
+    config_file = "continuing/SafeLTAPPO-Discrete-JSQN2S2.yaml"
+    #config_file = "noncontinuing/SafePPO-Discrete-JSQN4.yaml"
     config = parse_config(config_file)
 
     # === Init Environment === #
@@ -67,9 +68,12 @@ if __name__ == "__main__":
     #obs_normalizer = MovingNormalizer(config.env.flat_state_dim, config.normalizers.obs.eps)
     obs_normalizer = FixedNormalizer(config.env.flat_state_dim, config.normalizers.obs.norm_factor)
     #obs_normalizer = MovingNormalizer2(config.env.flat_state_dim, config.normalizers.obs.eps, buffer_size = 128, beta = 0.2)
-    target_scaler = CriticTargetScaler(config.env.flat_state_dim, config.normalizers.target.update_rate, config.normalizers.target.eps)
-    if config.agent.lta_agent:
+    if hasattr(config.normalizers, "target") and config.normalizers.target.update_rate is not None:
+        target_scaler = CriticTargetScaler(config.env.flat_state_dim, config.normalizers.target.update_rate, config.normalizers.target.eps)
+    else:
         target_scaler = None
+    # if config.agent.lta_agent:
+    #     target_scaler = None
 
 
     # Initialize Neural Agent
@@ -90,12 +94,27 @@ if __name__ == "__main__":
     history = None
     pbar = tqdm(range(config.train.num_episodes), ncols=80, desc="Training Episodes")
     artifact = wandb.Artifact(config.artifact_name, type="agent")
+    best_lta_backlog = np.inf
     history = None
+    if config.train.pretrain_steps > 0:
+        rollout = gen_rollout(env, agent, length = config.train.pretrain_steps, show_progress=False, reset = config.train.reset)
+        buffer.add_transitions(rollout)
+        rollout = process_rollout(rollout, agent)
+        eps_lta_backlog = log_rollout_summary(rollout, 0, glob="pretrain")
+        history, _ = log_rollouts(rollout, glob="Live Rollout", history=history)
+        batch = buffer.get_last_rollout()
+        update_metrics = agent.update(batch, pretrain = True)
+        log_update_metrics(update_metrics, 0, glob="pretrain", type = "minibatches")
+
     for eps in pbar:
         rollout = gen_rollout(env, agent, length = config.train.batch_size, show_progress=False, reset = config.train.reset)
         buffer.add_transitions(rollout)
         rollout = process_rollout(rollout, agent)
-        eps_lta_reward = log_rollout_summary(rollout, eps, glob="rollout_summary")
+        eps_lta_backlog = log_rollout_summary(rollout, eps, glob="rollout_summary")
+        if eps_lta_backlog < best_lta_backlog:
+            best_lta_backlog = eps_lta_backlog
+            if eps >= 50:
+                save_agent_wandb(agent, mod = "_best")
         if not config.train.reset:
             history, _ = log_rollouts(rollout, glob="Live Rollout", history=history)
         batch = buffer.get_last_rollout()

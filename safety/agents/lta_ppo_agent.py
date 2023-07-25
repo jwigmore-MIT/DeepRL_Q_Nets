@@ -5,6 +5,9 @@ from typing import Union
 from safety.agents.normalizers import MovingNormalizer, CriticTargetScaler, FakeTargetScaler
 from safety.agents.critics import Critic
 import pickle
+import matplotlib.pyplot as plt
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 class LTAPPOAgent:
     "Simple PPO Agent without intervention"
@@ -35,6 +38,9 @@ class LTAPPOAgent:
                  imit_coef: float = 0.0,
                  pg_coef: float = 1.0,
                  int_coef: float = 0.0,
+                 norm_adv: bool = True,
+                 pretrain_minibatches = 0,
+                 pretrain_epochs = 0
 
                  ):
             # Actor
@@ -54,11 +60,13 @@ class LTAPPOAgent:
         self.update_epochs = update_epochs
         self.minibatches = minibatches
         self.shuffle_mb = shuffle_mb
+        self.norm_adv = norm_adv
 
         # For value/advantage estimation
         self.alpha = alpha # LTA estimate update rate
         self.nu = nu # Average Value Constraint Coefficient
-        self.eta = 0 # LTA estimate
+        self.eta = None # LTA estimate
+        self.omega = 1 # LTA variance estimate
         self.b = 0
         self.gamma = gamma
         self.gae_lambda = gae_lambda
@@ -75,6 +83,9 @@ class LTAPPOAgent:
         self.pg_coef  = pg_coef
         self.int_coef = int_coef
 
+        self.pretrain_minibatches = pretrain_minibatches
+        self.pretrain_epochs = pretrain_epochs
+
 
 
 
@@ -89,9 +100,11 @@ class LTAPPOAgent:
         else:
             return self.actor.act(obs, device), obs
 
+        # update the eta estimate
+        self.update_b_eta(batch["rewards"], batch["nn_obs"])
 
 
-    def update(self, batch: dict):
+    def update(self, batch: dict, pretrain = False):
         # Update the actor and critic networks using PPO algorithm
         results = {} # Dict to store results
 
@@ -112,8 +125,11 @@ class LTAPPOAgent:
                 b_targets, b_advantages = self.compute_targets(b_rewards, batch['nn_obs'], next_nn_obs, batch['dones'])
                 # targets should be normalized, advantages should not be normalized
 
-        for i in range(self.update_epochs):
+        update_epochs = self.update_epochs if not pretrain else self.pretrain_epochs
+        results = {}
+        for i in range(update_epochs):
             # Compute the
+
             if self.recompute_adv:
                 with torch.no_grad():
                     # modifies the rewards to include the interventions
@@ -129,9 +145,14 @@ class LTAPPOAgent:
             b_inds = np.arange(len(batch['nn_obs']))
             if self.shuffle_mb:
                 np.random.shuffle(b_inds)
-            minibatch_size = int(len(b_inds) // self.minibatches)
+            if not pretrain:
+                minibatch_size = int(len(b_inds) // self.minibatches)
+            else:
+                minibatch_size = int(len(b_inds) // self.pretrain_minibatches)
 
-            results = {}
+            if pretrain:
+                self.update_b_eta(batch["rewards"], batch["nn_obs"])
+
             for start in range(0, len(b_inds), minibatch_size):
                 end = start+ minibatch_size
                 mb_inds = b_inds[start:end]
@@ -146,9 +167,11 @@ class LTAPPOAgent:
                 # update the critic
                 if self.critic_first:
                     mb_critic_results = self.update_critic_mb(mb_obs, mb_targets)
-                    mb_actor_results = self.update_actor_mb(mb_obs, mb_actions, mb_log_probs, mb_advantages, mb_interventions)
+                    if not pretrain:
+                        mb_actor_results = self.update_actor_mb(mb_obs, mb_actions, mb_log_probs, mb_advantages, mb_interventions)
                 else:
-                    mb_actor_results = self.update_actor_mb(mb_obs, mb_actions, mb_log_probs, mb_advantages, mb_interventions)
+                    if not pretrain:
+                        mb_actor_results = self.update_actor_mb(mb_obs, mb_actions, mb_log_probs, mb_advantages, mb_interventions)
                     mb_critic_results = self.update_critic_mb(mb_obs, mb_targets)
 
 
@@ -158,12 +181,13 @@ class LTAPPOAgent:
                         results[key].append(value)
                     else:
                         results[key] = [value]
-                for key, value in mb_actor_results.items():
-                    if key in results:
-                        results[key].append(value)
-                    else:
-                        results[key] = [value]
-            return results
+                if not pretrain:
+                    for key, value in mb_actor_results.items():
+                        if key in results:
+                            results[key].append(value)
+                        else:
+                            results[key] = [value]
+        return results
 
     # === Critic Methods === #
 
@@ -258,6 +282,7 @@ class LTAPPOAgent:
                 "target_mean": target_mean,
                 "target_std": target_std,
                 "eta": self.eta,
+                "omega": self.omega,
                 "mb_targets": mb_targets.mean().item(),
                 "mb_values": new_values.mean().item(),
                 "bias_factor": bias_factor,
@@ -320,7 +345,7 @@ class LTAPPOAgent:
                     next_value = next_val
                 else:
                     next_value = values[t + 1]
-                delta = rewards[t] + self.gamma * next_value  - values[t] - self.eta
+                delta = (rewards[t]- self.eta)/self.omega + self.gamma * next_value  - values[t]
                 adv[t] = last_gae_lam =  delta +  self.gamma * self.gae_lambda* last_gae_lam
         return adv
 
@@ -328,8 +353,14 @@ class LTAPPOAgent:
 
     def update_b_eta(self, rewards, nn_obs):
         # updating eta
-
-        self.eta = self.eta * (1-self.alpha) + rewards.mean().item() * (self.alpha)
+        # if self.omega is None:
+        #     self.omega = rewards.std().item()
+        # else:
+        #     self.omega = self.omega * (1-self.alpha) + rewards.std().item() * (self.alpha)
+        if self.eta is None:
+            self.eta = rewards.mean().item()
+        else:
+            self.eta = self.eta * (1-self.alpha) + rewards.mean().item() * (self.alpha)
         with torch.no_grad():
             # updating b
             values = self.get_true_value(nn_obs)  # nn_obs = batch["nn_obs"]
@@ -361,6 +392,12 @@ class LTAPPOAgent:
             if approx_kl.abs() > self.kl_target:
                 # if the KL is too high, we stop updating the policy
                 update = False
+        mb_adv_mean = mb_advantages.mean().item()
+        mb_adv_std = mb_advantages.std().item()
+        if self.norm_adv:
+
+            mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+
 
 
         # policy loss
@@ -393,6 +430,8 @@ class LTAPPOAgent:
             pg_magnitude = torch.norm(
                 torch.stack([torch.norm(p.grad.detach(), 2.0) for p in list(self.actor.parameters())]), 2.0)
 
+            # pg_variance = torch.var(
+            #     torch.stack([p.grad.data.view(-1) for p in list(self.actor.parameters())]))
             # result["stop_update"] = False
 
         else:
@@ -408,8 +447,11 @@ class LTAPPOAgent:
         result["actor_loss_unclipped"] = pg_loss1.mean().item()
         result["stop_update"] = float(not update)
         result["pg_magnitude"] = pg_magnitude.item()
+        #result["pg_variance"] = pg_variance.item()
         result["imit_loss"] = self.imit_coef * imit_loss.mean().item()
         result["int_loss"] = self.int_coef * int_loss.item()
+        result["mb_adv_std"] = mb_adv_std
+        result["mb_adv_mean"] = mb_adv_mean
 
 
         return result

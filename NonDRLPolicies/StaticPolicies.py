@@ -108,9 +108,14 @@ class DiamondOptimalPolicy(nn.Module):
 
 class JoinTheShortestQueuePolicy:
 
-    def __init__(self, env):
-        self.env = deepcopy(env)
+    def __init__(self, env, error_rate = 0.0):
+        if hasattr(env, 'unwrapped'):
+            self.env = env.unwrapped
+        else:
+            self.env = deepcopy(env)
         self.links = env.get_links()
+        self.error_rate = error_rate
+
 
     def __str__(self):
         return "JoinTheShortestQueuePolicy"
@@ -121,20 +126,99 @@ class JoinTheShortestQueuePolicy:
 
         # Convert Queues to integer based keys
         Q = keys_to_ints(d_state['Q'])
-        # Get all queue sizes except the source Q[1] and the sink Q[Q.__len__()]
-        Qs = np.array([Q[i][1] for i in range(2,Q.__len__())])
-        min_Q = np.argmin([Qs]) + 2
-        # Create action as dictionary
         f = self.env.get_action_format()
-        for link in f.keys():
-            if link[0] == 1:
-                if link[1] == min_Q:
-                    f[link][1] = min(1, int(Q[link[0]][1]))
-            else:
-                f[link][1] = min(1, int(Q[link[0]][1]))
+
+        while Q[1][1] > 0:
+            # Get all queue sizes except the source Q[1] and the sink Q[Q.__len__()]
+            Qs = np.array([Q[i][1] for i in range(2,Q.__len__())])
+            # Get the minimum queue out of all server queues
+            min_Q = np.argmin([Qs]) + 2
+            # If we want to add error, add error
+            if self.error_rate > 0.0:
+                if np.random.rand() < self.error_rate:
+                    min_Q = np.random.randint(2,Q.__len__())
+            # Create action as dictionary
+            """There are two types of links for server allocation problems
+            1. Going from source to server
+            2. Going from server to sink
+            For all links of type 1:
+                If the link is going to the server with the minimum queue, set the flow to the minimum of the capacity and the queue size
+                Else set the flow to 0
+            For all links of type 2:
+                Set the flow to the minimum of the capacity and the queue size
+            """
+            for link in f.keys():
+                src = link[0]
+                dst = link[1]
+                cls = 1
+                if src == 1:
+                    if dst == min_Q:
+                        f[link][cls] = min(self.env.Cap[link], int(Q[src][cls]))
+                        Q[src][cls] -= f[link][cls]
+                        Q[dst][cls] += f[link][cls]
+                else:
+                    f[link][cls] = self.env.max_actions[link][cls]
 
         flat_f = self.env.flatten_action(f)
+
         return flat_f[0,:]
+
+class JoinARandomQueuePolicy:
+
+    def __init__(self, env):
+        if hasattr(env, 'unwrapped'):
+            self.env = env.unwrapped
+        else:
+            self.env = deepcopy(env)
+        self.links = env.get_links()
+
+
+    def __str__(self):
+        return "JoinARandomQueuePolicy"
+    def act(self, state: dict, device=None):
+        return self.forward(state)
+    def forward(self, state: dict, old_state=None):
+        d_state = self.env.unflatten_obs(state.reshape(-1,1)) # state as dictionary
+
+        # Convert Queues to integer based keys
+        Q = keys_to_ints(d_state['Q'])
+        f = self.env.get_action_format()
+
+        while Q[1][1] > 0:
+            # Get all queue sizes except the source Q[1] and the sink Q[Q.__len__()]
+            Qs = np.array([Q[i][1] for i in range(2,Q.__len__())])
+            # Get the minimum queue out of all server queues
+            rand_Q = np.random.randint(Qs.__len__()) +2
+            #min_Q = np.argmin([Qs]) + 2
+            # If we want to add error, add error
+
+            # Create action as dictionary
+            """There are two types of links for server allocation problems
+            1. Going from source to server
+            2. Going from server to sink
+            For all links of type 1:
+                If the link is going to the server with the minimum queue, set the flow to the minimum of the capacity and the queue size
+                Else set the flow to 0
+            For all links of type 2:
+                Set the flow to the minimum of the capacity and the queue size
+            """
+            for link in f.keys():
+                src = link[0]
+                dst = link[1]
+                cls = 1
+                if src == 1:
+                    if dst == rand_Q:
+                        f[link][cls] = min(self.env.Cap[link], int(Q[src][cls]))
+                        Q[src][cls] -= f[link][cls]
+                        Q[dst][cls] += f[link][cls]
+                else:
+                    f[link][cls] = self.env.max_actions[link][cls]
+
+        flat_f = self.env.flatten_action(f)
+
+        return flat_f[0,:]
+
+
 # class ShortestPath:
 #
 #     def __init__(self, env):

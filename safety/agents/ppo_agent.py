@@ -30,6 +30,7 @@ class PPOAgent:
                  imit_coef: float = 0.0,
                  pg_coef: float = 1.0,
                  int_coef: float = 0.0,
+                 critic_error_threshold: float = np.infty
 
                  ):
             # Actor
@@ -62,6 +63,8 @@ class PPOAgent:
         self.pg_coef  = pg_coef
         self.int_coef = int_coef
         self.agent_buffer = agent_buffer()
+
+        self.critic_error_threshold = critic_error_threshold
 
 
 
@@ -119,6 +122,7 @@ class PPOAgent:
 
                 # update the critic
                 mb_critic_results = self.update_critic_mb(mb_obs, mb_targets)
+                self.avg_critic_error = mb_critic_results["avg_critic_error"]
                 mb_actor_results = self.update_actor_mb(mb_obs, mb_actions, mb_log_probs, mb_advantages, mb_interventions)
 
                 # process results for wandb logging
@@ -211,13 +215,22 @@ class PPOAgent:
             max_critic_dev = max_critic_error
         else:
             max_critic_dev = min_critic_error
+        if self.target_scaler is not None:
+            target_mean = self.target_scaler.target_mean
+            target_std = self.target_scaler.target_std
+        else:
+            target_mean = None
+            target_std = None
         return {"critic_loss": critic_loss.item(),
                 "max_critic_dev: ": max_critic_dev,
-                "avg_critic_error: ": critic_errors.abs().mean().item(),
-                "avg_critic_true_error: ": true_errors.abs().mean().item(),
+                "avg_critic_error": critic_errors.abs().mean().item(),
+                "avg_critic_true_error": true_errors.abs().mean().item(),
                 "explained_variance": explained_variance.item(),
-                "target_mean": self.target_scaler.target_mean,
-                "target_std": self.target_scaler.target_std}
+                "target_mean": target_mean,
+                "target_std": target_std,
+                "mb_targets": mb_targets.mean().item(),
+                "mb_values": new_values.mean().item(),
+                }
 
 
     def update_critic(self, batch: dict, b_targets: torch.Tensor):
@@ -280,7 +293,12 @@ class PPOAgent:
     # === Actor Methods === #
 
     def update_actor_mb(self, mb_obs, mb_actions, mb_log_probs, mb_advantages, mb_interventions):
-        update = True
+        if self.avg_critic_error < self.critic_error_threshold:
+            update = True
+            bad_critic = False
+        else:
+            update = False
+            bad_critic = True
         result = self.actor.log_prob(mb_obs, mb_actions, extra=True)
         self.agent_buffer.add_data(result)
         log_ratio = (result["log_probs"] - mb_log_probs)
@@ -310,7 +328,11 @@ class PPOAgent:
         pg_loss1 = -mb_advantages * ratio * (1-mb_interventions) # unclipped loss
         pg_loss2 = -mb_advantages * torch.clamp(ratio, 1.0 - self.clip_coef, 1.0 + self.clip_coef) * (1-mb_interventions) # clipped loss
 
-        imit_loss = ((result["actor_means"] - mb_actions) * mb_interventions).pow(2)
+        if self.actor._get_name() == "JSQDiscreteActor":
+            mlp_actions = mb_actions[:,: mb_actions.shape[1]//2]
+            imit_loss = ((result["actor_means"] - mlp_actions) * mb_interventions).pow(2)
+        else:
+            imit_loss = ((result["actor_means"] - mb_actions) * mb_interventions).pow(2)
         int_loss = mb_interventions.sum()
 
         kl_loss = self.kl_coef * approx_kl
@@ -350,6 +372,7 @@ class PPOAgent:
         result["pg_magnitude"] = pg_magnitude.item()
         result["imit_loss"] = imit_loss.mean().item()
         result["int_loss"] = int_loss.item()
+        result["bad_critic"] = bad_critic
 
 
         return result
@@ -448,20 +471,33 @@ class agent_buffer:
 
     def add_data(self, dict_):
         "dict_ is a dictionary of Tensors"
-        for key, value in dict_.items():
-            # convert the data from a tensor to a numpy array
-            data = value.detach().numpy()
-            n_data = data.shape[0]
-            if len(data.shape) == 1:
-                data = data.reshape((n_data, 1))
+        try:
+            for key, value in dict_.items():
+                # convert the data from a tensor to a numpy array
+                data = value.detach().numpy()
+                n_data = data.shape[0]
+                if len(data.shape) == 1:
+                    data = data.reshape((n_data, 1))
 
-            l_data = data.shape[1]
-            # if the key is not an attribute of the class, add it as an attribute
-            if not hasattr(self, key):
-                init_data = np.zeros((self.max_size, l_data))
-                setattr(self, key, init_data)
+                l_data = data.shape[1]
+                # if the key is not an attribute of the class, add it as an attribute
+                if not hasattr(self, key):
+                    init_data = np.zeros((self.max_size, l_data))
+                    setattr(self, key, init_data)
 
-            item = getattr(self, key)
-            item[self._pointer: self._pointer + n_data] = data
-        self._pointer += n_data
+                item = getattr(self, key)
+                item[self._pointer: self._pointer + n_data] = data
+            self._pointer += n_data
+        except ValueError:
+            print("ValueError")
+            print(dict_)
+            print(data)
+            print(n_data)
+            print(self._pointer)
+            print(self.max_size)
+            print(key)
+            print(value)
+            print(item)
+            print(self.__dict__)
+
 

@@ -47,36 +47,38 @@ agent:
     args:
       M: "R"
   critic:
-    learning_rate: 8.0e-4
+    learning_rate: 3.0e-03
     kwargs:
-        hidden_dim: 128
+        hidden_dim: 64
         activation: "tanh"
         hidden_layers: 2
   n_epochs: 10
   kwargs:
     critic_first: true
-    recompute_adv: true
+    recompute_adv: false
     update_epochs: 10 # number of updates to perform per batch
     minibatches: 4 # number of minibatches to break the data up into
-    shuffle_mb: true
-    alpha: 0.05
+    alpha: 0.2
     nu: 0.3
-    gamma: 0.0
     gae_lambda: 0.95
-    clip_coef: 0.1
+    clip_coef: 0.2
     kl_coef: 0.0
     ent_coef: 0.0
-    kl_target: 0.01
+    kl_target: 1
     grad_clip: 10
     value_clip: 1
     vf_coef: 0.5
     imit_coef: 1.0
     pg_coef: 1.0
     int_coef: 0.0
+    norm_adv: false
+    pretrain_minibatches: 1
+    pretrain_epochs: 1000
+
 
 
 env:
-    env_json_path: "/JSON/Environment/ServerAllocation/N4.json"
+    env_json_path: "/JSON/Environment/ServerAllocation/N2S2.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false
@@ -89,9 +91,11 @@ wandb:
 
 
 train:
-  num_episodes: 5000
-  batch_size: 10240
+  num_episodes: 10000
+  batch_size: 512
   reset: false
+  pretrain_steps: 10000
+
 
 eval:
   n_eval_episodes: 10

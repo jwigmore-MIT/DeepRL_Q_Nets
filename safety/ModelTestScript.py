@@ -31,22 +31,22 @@ from safety.agents.normalizers import MovingNormalizer, CriticTargetScaler
 if __name__ == "__main__":
 
     # === Init Config === #
-    config_file = "SafePPO-Gaussian-Env2a.yaml"
+    config_file = "noncontinuing/SafePPO-Discrete-JSQN4AS.yaml"
     config = parse_config(config_file, run_type="TEST")
 
     # === Init Environment === #
     env = generate_env(config)
 
     # ===Load Agent ===#
-    load_path = "../safety/saved_models/SafePPO-Gaussian_Env2a_TRAIN_20230627-155325/agent_final.pkl"
+    load_path = "../safety/wandb/run-20230721_154836-5c67902c-95c7-462d-becc-cc80de06d2e7/files/agent_best.pkl"
     agent = pickle.load(open(load_path, "rb"))
-    agent.force_nn = False
-    agent.neural_agent.actor.eval()
+    agent.force_nn = True
+    agent.change_mode(mode = "test")
     # init wandb
     wandb_init(config)
 
-    test_multiple = True
-    view_multiple = True
+    test_multiple = False
+    view_multiple = False
     env.reset(seed = config.seed)
     if test_multiple:
         for eps in range(10):
@@ -56,7 +56,7 @@ if __name__ == "__main__":
             log_rollout_summary(rollout, eps, glob="test")
             env.reset(seed = config.seed)
     else:
-        rollout = gen_rollout(env, agent, length=1000)
+        rollout = gen_rollout(env, agent, length=10000)
         test_history, test_lta_reward = log_rollouts(rollout, glob="test")
         log_rollout_summary(rollout, 0, glob="test")
         env.reset(seed=config.seed)

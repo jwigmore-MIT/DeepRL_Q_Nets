@@ -15,7 +15,7 @@ import pickle
 
 # Custom imports
 from safety.buffers import Buffer
-from NonDRLPolicies.StaticPolicies import JoinTheShortestQueuePolicy
+from NonDRLPolicies.StaticPolicies import JoinTheShortestQueuePolicy, JoinARandomQueuePolicy
 from safety.roller import gen_rollout, log_rollouts
 from safety.wandb_funcs import wandb_init, load_agent_wandb
 from safety.loggers import log_rollouts, log_update_metrics, log_rollout_summary
@@ -33,22 +33,28 @@ if __name__ == "__main__":
 
     # === Init Config === #
     config_file = "Backpressure/JSQ_Test1.yaml"
+    config_file = "Backpressure/JRQ_Test1.yaml"
     config = parse_config(config_file, run_type="TEST")
 
     # === Init Environment === #
     env = generate_env(config)
 
     # ===Load Agent ===#
-    agent = JoinTheShortestQueuePolicy(env)
-
+    if config.agent.policy == "JSQ":
+        agent = JoinTheShortestQueuePolicy(env, config.agent.error_prob)
+    elif config.agent.policy == "JRQ":
+        agent = JoinARandomQueuePolicy(env)
     # init wandb
     wandb_init(config)
 
 
     env.reset()
-    rollout = gen_rollout(env, agent, length=config.eval.length)
-    test_history, test_lta_reward = log_rollouts(rollout, glob="test")
-    log_rollout_summary(rollout, 0, glob="test")
+    test_history = None
+    pbar = tqdm(range(config.eval.n_eval_episodes), desc=f"Testing episodes")
+    for eps in pbar:
+        rollout = gen_rollout(env, agent, length=config.eval.episode_length, reset = False, show_progress = False)
+        test_history, test_lta_reward = log_rollouts(rollout, glob="test", history=test_history)
+        log_rollout_summary(rollout, eps, glob="test")
 
     wandb.finish()
 

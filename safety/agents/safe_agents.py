@@ -113,9 +113,9 @@ class SafeAgent(nn.Module):
             nn_obs = self.neural_agent.obs_normalizer.normalize(state, update=True)
         return action, nn_obs, 1-safe, int_prob
 
-    def update(self, batch):
+    def update(self, batch, pretrain = False):
         # Need to factor in the intervention
-        return self.neural_agent.update(batch)
+        return self.neural_agent.update(batch, pretrain)
 
     def get_log_prob(self, obs, action):
         return self.neural_agent.get_log_prob(obs, action)

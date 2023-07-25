@@ -1,8 +1,9 @@
 import wandb
 import numpy as np
+import pandas as pd
 
 
-def log_rollouts(rollout, history = None,  policy_name = "policy", glob = "test", include = ["all"], log_vectors = False):
+def log_rollouts(rollout, history = None,  rolling_statistics = False, rolling_window = 1000, glob = "test", include = ["all"], log_vectors = False):
 
     # Per time step logging
     rollout_length = len(rollout["rewards"])
@@ -36,10 +37,16 @@ def log_rollouts(rollout, history = None,  policy_name = "policy", glob = "test"
                 else:
                     history[key] = np.concatenate([history[key], rollout[key]])
     # Compute LTA Rewards from history
-    history["LTA_Rewards"], _ = get_reward_stats(np.array(history["rewards"]).reshape(-1, 1))
-    history["LTA_Backlogs"], _ = get_reward_stats(np.array(history["backlogs"]).reshape(-1, 1))
+    history["LTA_Rewards"], _, history[f"Reward_Var(w = {rolling_window})"] = get_reward_stats(np.array(history["rewards"]).reshape(-1, 1), rolling_window = rolling_window)
+    history["LTA_Backlogs"], _, history[f"Backlog_Var(w = {rolling_window})"] = get_reward_stats(np.array(history["backlogs"]).reshape(-1, 1), rolling_window = rolling_window)
     rollout["LTA_Rewards"] = history["LTA_Rewards"][-rollout_length:]
     rollout["LTA_Backlogs"] = history["LTA_Backlogs"][-rollout_length:]
+    rollout[f"Reward_Var(w = {rolling_window})"] = history[f"Reward_Var(w = {rolling_window})"][-rollout_length:]
+    rollout[f"Backlog_Var(w = {rolling_window})"] = history[f"Backlog_Var(w = {rolling_window})"][-rollout_length:]
+    if rolling_statistics:
+        if rolling_window == 0:
+            rolling_window = rollout_length
+        rollout[f"Reward_Variance(window)={rolling_window}"] = pd.Series(rollout["rewards"][:,0]).rolling(rolling_window, min_periods=1).var().values
     for i in range(rollout_length):
         log_dict = {}
         for key in include:
@@ -52,7 +59,9 @@ def log_rollouts(rollout, history = None,  policy_name = "policy", glob = "test"
         wandb.log(log_dict)
 
 
+
     return history, rollout["LTA_Rewards"][-1]
+
 
 
 def log_rollout_summary(rollout, eps = 0, glob = "test"):
@@ -64,7 +73,7 @@ def log_rollout_summary(rollout, eps = 0, glob = "test"):
     # log["backlog_dist_std"] = rollout["backlogs"].std(axis = 0)
 
     # 2. LTA_backlog
-    LTA_backlog, LTA_Error = get_reward_stats(np.array(rollout["backlogs"]).reshape(-1,1))
+    LTA_backlog, LTA_Error, LTA_Backlog_Var = get_reward_stats(np.array(rollout["backlogs"]).reshape(-1,1))
     log["LTA_backlog"] = LTA_backlog[-1]
 
     # 3. State distribution
@@ -78,7 +87,9 @@ def log_rollout_summary(rollout, eps = 0, glob = "test"):
 
     #5. Simple means
     log["mean_reward"] = np.mean(rollout["rewards"])
+    log["var_reward"] = np.var(rollout["rewards"])
     log["mean_backlog"] = np.mean(rollout["backlogs"])
+    log["var_backlog"] = np.var(rollout["backlogs"])
     log["intervention_rate"] = np.mean(rollout["interventions"])
 
     log_dict = {}
@@ -89,8 +100,10 @@ def log_rollout_summary(rollout, eps = 0, glob = "test"):
     return log["LTA_backlog"]
 
 
-
-def get_reward_stats(reward_vec, startime = None, stoptime = None):
+def log_optimizer_statistics(state_dict, glob = "optimizer"):
+    #for p, metrics in state_dict["state"].items():
+    pass
+def get_reward_stats(reward_vec, startime = None, stoptime = None, rolling_window = 100):
     if startime is None:
         startime = 1
     if stoptime is None:
@@ -102,7 +115,10 @@ def get_reward_stats(reward_vec, startime = None, stoptime = None):
 
     time_averaged_rewards = sum_average_rewards.mean(axis = 1)
     time_averaged_errors = sum_average_rewards.std(axis=1)
-    return time_averaged_rewards, time_averaged_errors
+
+    # Get rolling average of the errors from startime to stoptime
+    rolling_var = pd.Series(reward_vec[:,0]).rolling(rolling_window, min_periods=1).var().values
+    return time_averaged_rewards, time_averaged_errors, rolling_var
 
 
 def log_pretrain_metrics(metrics):

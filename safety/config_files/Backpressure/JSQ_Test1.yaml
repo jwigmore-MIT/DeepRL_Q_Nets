@@ -15,27 +15,28 @@ agent:
   policy_name: JSQ
   policy: JSQ
   safe_agent: false
+  error_prob: 0.0
 
 
 
 
 env:
-    env_json_path: "/JSON/Environment/ServerAllocation/N4AS.json"
+    env_json_path: "/JSON/Environment/ServerAllocation/N2S2.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false
       record_stats: true
 
 wandb:
-    project: "JoinTheShortestQueue"
-    group: "Debug"
+    project: "VarianceTesting"
+    group: ""
 
 
 
 eval:
-  n_eval_episodes: 10
+  n_eval_episodes: 100
   deterministic: true
-  length: 50000
+  episode_length: 1000
 
 
 
