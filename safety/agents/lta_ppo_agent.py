@@ -357,7 +357,11 @@ class LTAPPOAgent:
         #     self.omega = rewards.std().item()
         # else:
         #     self.omega = self.omega * (1-self.alpha) + rewards.std().item() * (self.alpha)
-        if self.eta is None:
+        if self.alpha is None:
+            self.eta = 0
+            self.beta=0
+            return
+        elif self.eta is None:
             self.eta = rewards.mean().item()
         else:
             self.eta = self.eta * (1-self.alpha) + rewards.mean().item() * (self.alpha)
