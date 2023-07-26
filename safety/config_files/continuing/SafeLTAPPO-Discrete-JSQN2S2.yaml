@@ -15,14 +15,14 @@ load:
   zip_path: saved_models/PPO_Env1a_TRAIN_20230621-123803/best_model
 
 buffer:
-  size: 1.0e+8
+  size: 6.0e+7
 normalizers:
   obs:
     type: Fixed
     norm_factor: 20
     eps: 1.0e-6
   target:
-    update_rate: 0.1
+    update_rate: ~
     eps: 1.0e-6
 
 agent:
@@ -55,12 +55,12 @@ agent:
   n_epochs: 10
   kwargs:
     critic_first: true
-    recompute_adv: true
+    recompute_adv: false
     update_epochs: 10 # number of updates to perform per batch
     minibatches: 4 # number of minibatches to break the data up into
-    alpha: ~
+    alpha: 0.1
     nu: 0.0
-    gamma: 0.95
+    gamma: 1.0
     gae_lambda: 0.5
     clip_coef: 0.2
     kl_coef: 0.0
