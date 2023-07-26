@@ -21,14 +21,14 @@ agent:
 
 
 env:
-    env_json_path: "/JSON/Environment/ServerAllocation/N2S3.json"
+    env_json_path: "/JSON/Environment/ServerAllocation/N2S4.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false
       record_stats: true
 
 wandb:
-    project: "N2S3"
+    project: "N2S4"
     group: ""
 
 

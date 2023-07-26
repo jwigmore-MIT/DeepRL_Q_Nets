@@ -37,7 +37,7 @@ if __name__ == "__main__":
     #config_file = "continuing/SafeLTAPPO-Gaussian-Env1b.yaml"
     #config_file = "PPO-TanGaussian-Env1b.yaml"
     #config_file = "SafePPO-TanGaussian-Env1b.yaml"
-    config_file = "continuing/SafeLTAPPO-Discrete-JSQN2S3.yaml"
+    config_file = "continuing/SafeLTAPPO-Discrete-JSQN2S4.yaml"
     #config_file = "noncontinuing/SafePPO-Discrete-JSQN4.yaml"
     config = parse_config(config_file)
 
