@@ -40,7 +40,8 @@ class LTAPPOAgent:
                  int_coef: float = 0.0,
                  norm_adv: bool = True,
                  pretrain_minibatches = 0,
-                 pretrain_epochs = 0
+                 pretrain_epochs = 0,
+                 omega_norm: bool = False,
 
                  ):
             # Actor
@@ -67,6 +68,7 @@ class LTAPPOAgent:
         self.nu = nu # Average Value Constraint Coefficient
         self.eta = None # LTA estimate
         self.omega = 1 # LTA variance estimate
+        self.omega_norm = omega_norm # LTA variance estimate normalization
         self.b = 0
         self.gamma = gamma
         self.gae_lambda = gae_lambda
@@ -353,18 +355,21 @@ class LTAPPOAgent:
 
     def update_b_eta(self, rewards, nn_obs):
         # updating eta
-        # if self.omega is None:
-        #     self.omega = rewards.std().item()
-        # else:
-        #     self.omega = self.omega * (1-self.alpha) + rewards.std().item() * (self.alpha)
+
         if self.alpha is None:
             self.eta = 0
             self.beta=0
+            self.omega = 1
             return
         elif self.eta is None:
             self.eta = rewards.mean().item()
         else:
             self.eta = self.eta * (1-self.alpha) + rewards.mean().item() * (self.alpha)
+
+        if self.omega is None and self.omega_norm:
+            self.omega = (rewards-self.eta).std().item()
+        else:
+            self.omega = self.omega * (1-self.alpha) + (rewards-self.eta).std().item() * (self.alpha)
         with torch.no_grad():
             # updating b
             values = self.get_true_value(nn_obs)  # nn_obs = batch["nn_obs"]

@@ -75,6 +75,7 @@ agent:
     norm_adv: false
     pretrain_minibatches: 1
     pretrain_epochs: 1000
+    omega_norm: true
 
 
 

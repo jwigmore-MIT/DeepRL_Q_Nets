@@ -33,7 +33,7 @@ if __name__ == "__main__":
 
     # === Init Config === #
     config_file = "Backpressure/JSQ_Test1.yaml"
-    config_file = "Backpressure/JRQ_Test1.yaml"
+    #config_file = "Backpressure/JRQ_Test1.yaml"
     config = parse_config(config_file, run_type="TEST")
 
     # === Init Environment === #
