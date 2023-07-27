@@ -37,7 +37,7 @@ if __name__ == "__main__":
     #config_file = "continuing/SafeLTAPPO-Gaussian-Env1b.yaml"
     #config_file = "PPO-TanGaussian-Env1b.yaml"
     #config_file = "SafePPO-TanGaussian-Env1b.yaml"
-    config_file = "continuing/SafeLTAPPO-Discrete-JSQN2S4.yaml"
+    config_file = "continuing/SafeLTAPPO-Discrete-JSQN4S3.yaml"
     #config_file = "noncontinuing/SafePPO-Discrete-JSQN4.yaml"
     config = parse_config(config_file)
 
@@ -95,9 +95,9 @@ if __name__ == "__main__":
     pbar = tqdm(range(config.train.num_episodes), ncols=80, desc="Training Episodes")
     artifact = wandb.Artifact(config.artifact_name, type="agent")
     best_lta_backlog = np.inf
-    history = None
     if config.train.pretrain_steps > 0:
-        rollout = gen_rollout(env, agent, length = config.train.pretrain_steps, show_progress=False, reset = config.train.reset)
+        agent.force_safe = True
+        rollout = gen_rollout(env, agent, length = config.train.pretrain_steps, show_progress=False, reset = config.train.reset, pretrain= True, obs_scale_factor =config.normalizers.obs_scale_factor)
         buffer.add_transitions(rollout)
         rollout = process_rollout(rollout, agent)
         eps_lta_backlog = log_rollout_summary(rollout, 0, glob="pretrain")
@@ -105,7 +105,7 @@ if __name__ == "__main__":
         batch = buffer.get_last_rollout()
         update_metrics = agent.update(batch, pretrain = True)
         log_update_metrics(update_metrics, 0, glob="pretrain", type = "minibatches")
-
+        agent.force_safe = False
     for eps in pbar:
         rollout = gen_rollout(env, agent, length = config.train.batch_size, show_progress=False, reset = config.train.reset)
         buffer.add_transitions(rollout)

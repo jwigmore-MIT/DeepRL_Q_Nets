@@ -368,7 +368,7 @@ class LTAPPOAgent:
 
         if self.omega is None and self.omega_norm:
             self.omega = (rewards-self.eta).std().item()
-        else:
+        elif self.omega_norm:
             self.omega = self.omega * (1-self.alpha) + (rewards-self.eta).std().item() * (self.alpha)
         with torch.no_grad():
             # updating b

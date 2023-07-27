@@ -562,7 +562,7 @@ def init_actor(config, mid, action_ranges):
             {"params": actor._mlp.parameters(), 'lr': config.agent.actor.learning_rate},
             {"params": actor._log_std, 'lr': config.agent.actor.std_learning_rate},
         ])
-    elif config.agent.actor.type == "JSQDiscreteActor":
+    elif config.agent.actor.type in ["JSQDiscreteActor", "JRQDiscreteActor"]:
         actor = JSQDiscreteActor(config.env.flat_state_dim, config.env.flat_action_dim,
                               **config.agent.actor.kwargs.toDict())
         actor_optim = torch.optim.Adam(actor.parameters(), lr=config.agent.actor.learning_rate)

@@ -5,6 +5,7 @@ import pandas as pd
 
 def log_rollouts(rollout, history = None,  rolling_statistics = False, rolling_window = 1000, glob = "test", include = ["all"], log_vectors = False):
 
+    md_keys = ["obs", "nn_obs", "next_obs", "next_nn_obs", "flows", "arrivals", "state", "next_state", "actions", "obs_norm_factor"]
     # Per time step logging
     rollout_length = len(rollout["rewards"])
     # Make sure includes is set up correctly
@@ -12,8 +13,11 @@ def log_rollouts(rollout, history = None,  rolling_statistics = False, rolling_w
         include = [include]
     if not isinstance(include,list):
         Exception("include must be a list")
+
     if "all" in include:
-        include = rollout.keys()
+        all = rollout.keys()
+        include = [key for key in all if key not in md_keys]
+
     # initialize history if first time calling log_rollouts
     if history is None:
         history = {}
@@ -41,8 +45,13 @@ def log_rollouts(rollout, history = None,  rolling_statistics = False, rolling_w
     history["LTA_Backlogs"], _, history[f"Backlog_Var(w = {rolling_window})"] = get_reward_stats(np.array(history["backlogs"]).reshape(-1, 1), rolling_window = rolling_window)
     rollout["LTA_Rewards"] = history["LTA_Rewards"][-rollout_length:]
     rollout["LTA_Backlogs"] = history["LTA_Backlogs"][-rollout_length:]
-    rollout[f"Reward_Var(w = {rolling_window})"] = history[f"Reward_Var(w = {rolling_window})"][-rollout_length:]
-    rollout[f"Backlog_Var(w = {rolling_window})"] = history[f"Backlog_Var(w = {rolling_window})"][-rollout_length:]
+    rollout[f"Eps_Reward_Var(w = {rolling_window})"] = history[f"Reward_Var(w = {rolling_window})"][-rollout_length:]
+    rollout[f"Eps_Backlog_Var(w = {rolling_window})"] = history[f"Backlog_Var(w = {rolling_window})"][-rollout_length:]
+
+
+    all = rollout.keys()
+    include = [key for key in all if key not in md_keys]
+
     if rolling_statistics:
         if rolling_window == 0:
             rolling_window = rollout_length
@@ -74,7 +83,7 @@ def log_rollout_summary(rollout, eps = 0, glob = "test"):
 
     # 2. LTA_backlog
     LTA_backlog, LTA_Error, LTA_Backlog_Var = get_reward_stats(np.array(rollout["backlogs"]).reshape(-1,1))
-    log["LTA_backlog"] = LTA_backlog[-1]
+    log["Eps_LTA_backlog"] = LTA_backlog[-1]
 
     # 3. State distribution
     # log["state_dist_mean"] = rollout["obs"].mean(axis = 0)
@@ -91,13 +100,14 @@ def log_rollout_summary(rollout, eps = 0, glob = "test"):
     log["mean_backlog"] = np.mean(rollout["backlogs"])
     log["var_backlog"] = np.var(rollout["backlogs"])
     log["intervention_rate"] = np.mean(rollout["interventions"])
+    log["obs_norm_factor"] = rollout["obs_norm_factor"]
 
     log_dict = {}
     for key in log.keys():
         log_dict[f"{glob}/{key}"] = log[key]
     log_dict[f"{glob}/rollout"] = eps
     wandb.log(log_dict)
-    return log["LTA_backlog"]
+    return log["Eps_LTA_backlog"]
 
 
 def log_optimizer_statistics(state_dict, glob = "optimizer"):

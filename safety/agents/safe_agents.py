@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 import numpy as np
 from NonDRLPolicies.Backpressure import MCMHBackPressurePolicy
-from NonDRLPolicies.StaticPolicies import JoinTheShortestQueuePolicy
+from NonDRLPolicies.StaticPolicies import JoinTheShortestQueuePolicy, JoinARandomQueuePolicy
 from copy import deepcopy
 
 
@@ -90,6 +90,7 @@ class SafeAgent(nn.Module):
         if hasattr(neural_agent,"obs_normalizer"):
             self.obs_normalizer = neural_agent.obs_normalizer
         self.force_nn = False # to make it so the agent uses the neural agent even if it is in an unsafe state
+        self.force_safe = False
 
     def change_mode(self, mode = 'train'):
         if mode == 'train':
@@ -106,8 +107,13 @@ class SafeAgent(nn.Module):
         # check if state is safe
         safe, int_prob = self.check_safety(state)
 
-        if safe and not self.force_nn:
+        # if the state is safe, and we are not forcing the neural agent then use the neural agent
+        if safe and not self.force_nn and not self.force_safe:
             action, nn_obs =  self.neural_agent.act(state)
+        elif self.force_safe:
+            safe = 2
+            action = self.safe_actor.act(state)
+            nn_obs = self.neural_agent.obs_normalizer.normalize(state, update=True)
         else:
             action = self.safe_actor.act(state)
             nn_obs = self.neural_agent.obs_normalizer.normalize(state, update=True)
@@ -132,6 +138,8 @@ def init_safe_agent(safety_config, neural_agent, env):
         safe_policy = MCMHBackPressurePolicy(env, **safety_config.args.toDict())
     elif safety_config.safe_policy == "JSQ":
         safe_policy = JoinTheShortestQueuePolicy(env)
+    elif safety_config.safe_policy == "JRQ":
+        safe_policy = JoinARandomQueuePolicy(env)
     else:
         raise NotImplementedError("Safe policy not implemented")
 

@@ -1,7 +1,7 @@
 ---
 config:
 root_dir: ~
-notes: "Testing with JRQ safe policy rollout calibration phase"
+notes: ""
 seed: 5031997
 device: "cpu"
 deterministic_torch: true
@@ -17,6 +17,7 @@ load:
 buffer:
   size: 6.0e+7
 normalizers:
+  obs_scale_factor: 2.0
   obs:
     type: Fixed
     norm_factor: 20
@@ -40,7 +41,7 @@ agent:
       hidden_layers: 2
   safety:
     safe_policy: "JRQ"
-    trigger_state: 20
+    trigger_state: 50
     mod: ~
     mod_args:
       omega: 0.5
@@ -74,13 +75,13 @@ agent:
     int_coef: 0.0
     norm_adv: false
     pretrain_minibatches: 1
-    pretrain_epochs: 1000
+    pretrain_epochs: 1
     omega_norm: true
 
 
 
 env:
-    env_json_path: "/JSON/Environment/ServerAllocation/N2S3.json"
+    env_json_path: "/JSON/Environment/ServerAllocation/N4S3.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false
@@ -88,15 +89,15 @@ env:
       scale_reward: ~
 
 wandb:
-    project: "N2S3"
+    project: "N4S3"
     group: ~
 
 
 train:
   num_episodes: 10000
-  batch_size: 512
+  batch_size: 1024
   reset: false
-  pretrain_steps: 1000
+  pretrain_steps: 30000
 
 
 eval:

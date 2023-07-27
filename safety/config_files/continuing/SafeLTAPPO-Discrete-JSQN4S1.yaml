@@ -1,7 +1,7 @@
 ---
 config:
 root_dir: ~
-notes: "Testing with JRQ safe policy rollout calibration phase"
+notes: ""
 seed: 5031997
 device: "cpu"
 deterministic_torch: true
@@ -74,13 +74,13 @@ agent:
     int_coef: 0.0
     norm_adv: false
     pretrain_minibatches: 1
-    pretrain_epochs: 1000
+    pretrain_epochs: 1
     omega_norm: true
 
 
 
 env:
-    env_json_path: "/JSON/Environment/ServerAllocation/N2S3.json"
+    env_json_path: "/JSON/Environment/ServerAllocation/N4S1.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false
@@ -88,7 +88,7 @@ env:
       scale_reward: ~
 
 wandb:
-    project: "N2S3"
+    project: "N4S1"
     group: ~
 
 
@@ -96,7 +96,7 @@ train:
   num_episodes: 10000
   batch_size: 512
   reset: false
-  pretrain_steps: 1000
+  pretrain_steps: 5000
 
 
 eval:

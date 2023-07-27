@@ -1,7 +1,7 @@
 ---
 config:
 root_dir: ~
-notes: "Actor: tanh, 2 hidden layers. Critic: tanh, 2 hidden layers, 128 hidden dim. No imitation"
+notes: "Testing to see how many updates it takes for the critic to learn the value function"
 seed: 5031997
 device: "cpu"
 deterministic_torch: true
@@ -58,10 +58,10 @@ agent:
     recompute_adv: false
     update_epochs: 10 # number of updates to perform per batch
     minibatches: 4 # number of minibatches to break the data up into
-    alpha: 0.1
+    alpha: 0.05
     nu: 1.0
     gamma: 1.0
-    gae_lambda: 0.5
+    gae_lambda: 0.0
     clip_coef: 0.2
     kl_coef: 0.0
     ent_coef: 0.0
@@ -75,7 +75,7 @@ agent:
     norm_adv: false
     pretrain_minibatches: 1
     pretrain_epochs: 1000
-    omega_norm: false
+    omega_norm: true
 
 
 

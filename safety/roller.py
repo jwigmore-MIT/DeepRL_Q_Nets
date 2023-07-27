@@ -4,7 +4,7 @@ from tqdm import tqdm
 import wandb
 import pandas as pd
 
-def gen_rollout(env, agent, length = 1000, device = "cpu", pbar_desc = "Generating Rollout", frac = "", show_progress = True, reset = True):
+def gen_rollout(env, agent, length = 1000, device = "cpu", pbar_desc = "Generating Rollout", frac = "", show_progress = True, reset = True, pretrain = False, obs_scale_factor = 1):
 
     # Initialize temporary storage
     obs = np.zeros([length, env.observation_space.shape[0]])
@@ -64,6 +64,7 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", pbar_desc = "Generati
 
 
 
+
         if "final_info" in info:
             # info won't contain flows nor arrivals
             pass
@@ -74,7 +75,15 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", pbar_desc = "Generati
             state[t] = info['state'][-1]
             next_state[t] = info['next_state'][-1]
         next_ob = next_obs[t]
-
+    if pretrain:
+        # renormalize the nn_obs based on the pretraining trajectory:
+        agent.obs_normalizer.norm_factor = np.max(obs) * obs_scale_factor
+        nn_obs = agent.obs_normalizer.normalize(obs)
+        next_nn_obs = agent.obs_normalizer.normalize(next_obs)
+    if hasattr(agent, "obs_normalizer"):
+        obs_norm_factor = agent.obs_normalizer.norm_factor
+    else:
+        obs_norm_factor = 1
     if reset:
         env.reset()
         terminals[t] = 1
@@ -93,7 +102,8 @@ def gen_rollout(env, agent, length = 1000, device = "cpu", pbar_desc = "Generati
         "intervention_prob": intervention_prob,
         "backlogs": backlogs,
         "state": state,
-        "next_state": next_state
+        "next_state": next_state,
+        "obs_norm_factor": obs_norm_factor
     }
 
 def gen_step(env, agent, random = False, device = "cpu"):
