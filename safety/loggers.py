@@ -41,13 +41,14 @@ def log_rollouts(rollout, history = None,  rolling_statistics = False, rolling_w
                 else:
                     history[key] = np.concatenate([history[key], rollout[key]])
     # Compute LTA Rewards from history
-    history["LTA_Rewards"], _, history[f"Reward_Var(w = {rolling_window})"] = get_reward_stats(np.array(history["rewards"]).reshape(-1, 1), rolling_window = rolling_window)
-    history["LTA_Backlogs"], _, history[f"Backlog_Var(w = {rolling_window})"] = get_reward_stats(np.array(history["backlogs"]).reshape(-1, 1), rolling_window = rolling_window)
-    rollout["LTA_Rewards"] = history["LTA_Rewards"][-rollout_length:]
-    rollout["LTA_Backlogs"] = history["LTA_Backlogs"][-rollout_length:]
-    rollout[f"Eps_Reward_Var(w = {rolling_window})"] = history[f"Reward_Var(w = {rolling_window})"][-rollout_length:]
-    rollout[f"Eps_Backlog_Var(w = {rolling_window})"] = history[f"Backlog_Var(w = {rolling_window})"][-rollout_length:]
-
+    history["LTA_Rewards"], _, history[f"Reward_Var(w = {rolling_window})"], history[f"Reward_Mean(w = {rolling_window})"] = get_reward_stats(np.array(history["rewards"]).reshape(-1, 1), rolling_window = rolling_window)
+    history["LTA_Backlogs"], _, history[f"Backlog_Var(w = {rolling_window})"], history[f"Backlog_Mean(w = {rolling_window})"] = get_reward_stats(np.array(history["backlogs"]).reshape(-1, 1), rolling_window = rolling_window)
+    rollout["Live_LTA_Rewards"] = history["LTA_Rewards"][-rollout_length:]
+    rollout["Live_LTA_Backlogs"] = history["LTA_Backlogs"][-rollout_length:]
+    rollout[f"RA_Reward_Var(w = {rolling_window})"] = history[f"Reward_Var(w = {rolling_window})"][-rollout_length:]
+    rollout[f"RA_Reward_Mean(w = {rolling_window})"] = history[f"Reward_Mean(w = {rolling_window})"][-rollout_length:]
+    rollout[f"RA_Backlog_Var(w = {rolling_window})"] = history[f"Backlog_Var(w = {rolling_window})"][-rollout_length:]
+    rollout[f"RA_Backlog_Mean(w = {rolling_window})"] = history[f"Backlog_Mean(w = {rolling_window})"][-rollout_length:]
 
     all = rollout.keys()
     include = [key for key in all if key not in md_keys]
@@ -128,7 +129,8 @@ def get_reward_stats(reward_vec, startime = None, stoptime = None, rolling_windo
 
     # Get rolling average of the errors from startime to stoptime
     rolling_var = pd.Series(reward_vec[:,0]).rolling(rolling_window, min_periods=1).var().values
-    return time_averaged_rewards, time_averaged_errors, rolling_var
+    rolling_mean = pd.Series(reward_vec[:,0]).rolling(rolling_window, min_periods=1).mean().values
+    return time_averaged_rewards, time_averaged_errors, rolling_var, rolling_mean
 
 
 def log_pretrain_metrics(metrics):
