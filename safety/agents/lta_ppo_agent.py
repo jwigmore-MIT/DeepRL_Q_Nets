@@ -42,6 +42,7 @@ class LTAPPOAgent:
                  pretrain_minibatches = 0,
                  pretrain_epochs = 0,
                  omega_norm: bool = False,
+                 clip_adv = False,
 
                  ):
             # Actor
@@ -235,6 +236,7 @@ class LTAPPOAgent:
             # Compute the "true" targets
             b_targets = b_advantages + b_values
 
+
             # Normalize the target
             if self.target_scaler is not None:
                 self.target_scaler.update(b_targets)
@@ -246,6 +248,7 @@ class LTAPPOAgent:
         new_values = new_values
         bias_factor = self.b*self.nu
         critic_loss = self.compute_critic_loss(new_values, mb_targets, bias_factor)
+
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
@@ -331,9 +334,14 @@ class LTAPPOAgent:
 
 
     def compute_critic_loss(self, nn_values, b_targets, bias_factor):
+        if self.clip_vloss:
+            # clip the value loss
+            unclipped_loss = 0.5 * (b_targets - bias_factor - nn_values).pow(2)
+            clipped_diff = torch.clamp(b_targets - bias_factor - nn_values)
         #loss = torch.nn.functional.mse_loss(nn_values , b_targets)
-        loss = 0.5 * (b_targets - bias_factor - nn_values).pow(2).mean()
-        return loss
+        else:
+            mean_loss = 0.5 * (b_targets - bias_factor - nn_values).pow(2).mean()
+        return mean_loss
 
 
     def compute_GAE(self, rewards, values, next_val, dones = None):
@@ -347,8 +355,11 @@ class LTAPPOAgent:
                     next_value = next_val
                 else:
                     next_value = values[t + 1]
-                delta = (rewards[t]- self.eta)/self.omega + self.gamma * next_value  - values[t]
+                delta = (rewards[t] - self.eta) / self.omega + self.gamma * next_value - values[t]
+                #self.omega = 8
                 adv[t] = last_gae_lam =  delta +  self.gamma * self.gae_lambda* last_gae_lam
+        # if self.clip_adv:
+        #     adv = torch.clamp(adv, -self.clip_adv, self.clip_adv)
         return adv
 
 
@@ -369,7 +380,8 @@ class LTAPPOAgent:
         if self.omega is None and self.omega_norm:
             self.omega = (rewards-self.eta).std().item()
         elif self.omega_norm:
-            self.omega = self.omega * (1-self.alpha) + (rewards-self.eta).std().item() * (self.alpha)
+            #self.omega = self.omega * (1-self.alpha) + (rewards-self.eta).std().item() * (self.alpha)
+            self.omega = (rewards).std().item()
         with torch.no_grad():
             # updating b
             values = self.get_true_value(nn_obs)  # nn_obs = batch["nn_obs"]
