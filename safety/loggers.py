@@ -70,7 +70,7 @@ def log_rollouts(rollout, history = None,  rolling_statistics = False, rolling_w
 
 
 
-    return history, rollout["LTA_Rewards"][-1]
+    return history, rollout["Live_LTA_Rewards"][-1]
 
 
 
@@ -83,7 +83,7 @@ def log_rollout_summary(rollout, eps = 0, glob = "test"):
     # log["backlog_dist_std"] = rollout["backlogs"].std(axis = 0)
 
     # 2. LTA_backlog
-    LTA_backlog, LTA_Error, LTA_Backlog_Var = get_reward_stats(np.array(rollout["backlogs"]).reshape(-1,1))
+    LTA_backlog, LTA_Error, LTA_Backlog_Var, LTA_Backlog_Mean = get_reward_stats(np.array(rollout["backlogs"]).reshape(-1,1))
     log["Eps_LTA_backlog"] = LTA_backlog[-1]
 
     # 3. State distribution
