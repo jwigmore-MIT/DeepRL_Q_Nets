@@ -5,14 +5,15 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.constant_(layer.bias, bias_const)
     return layer
 
-def mlp_init(input_dim: int, output_dim: int, hidden_layers: int, hidden_dim: int, act_func: str):
+def mlp_init(input_dim: int, output_dim: int, hidden_layers: int, hidden_dim: int, act_func: str, final_linear: bool = True):
     layers = []
     in_dim = input_dim
     for i in range(hidden_layers):
         layers.append(layer_init(torch.nn.Linear(in_dim, hidden_dim)))
         layers.append(get_activation(act_func))
         in_dim = hidden_dim
-    layers.append(layer_init(torch.nn.Linear(in_dim, output_dim), std=0.01))
+    if final_linear:
+        layers.append(layer_init(torch.nn.Linear(in_dim, output_dim), std=0.01))
     return torch.nn.Sequential(*layers)
 
 def get_activation(act_func: str):

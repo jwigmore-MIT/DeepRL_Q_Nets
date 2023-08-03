@@ -21,9 +21,10 @@ from safety.loggers import log_rollouts, log_update_metrics, log_rollout_summary
 from safety.utils import *
 from Environments.MCMH_tools import generate_env
 from safety.agents.actors import init_actor
-from safety.agents.critics import Critic
+from safety.agents.critics import Critic, PopArtCritic
 from safety.agents.ppo_agent import PPOAgent
 from safety.agents.lta_ppo_agent import LTAPPOAgent
+from safety.agents.lta_ppo_popart_agent import LTAPPOPOPARTAgent
 from safety.agents.normalizers import MovingNormalizer, CriticTargetScaler, FixedNormalizer, MovingNormalizer2
 from safety.agents.safe_agents import init_safe_agent
 
@@ -37,7 +38,7 @@ if __name__ == "__main__":
     #config_file = "continuing/SafeLTAPPO-Gaussian-Env1b.yaml"
     #config_file = "PPO-TanGaussian-Env1b.yaml"
     #config_file = "SafePPO-TanGaussian-Env1b.yaml"
-    config_file = "continuing/SafeLTAPPO-Discrete-JSQN4S3.yaml"
+    config_file = "continuing/SafeLTAPPO-POPART-Discrete-JSQN2S2.yaml"
     #config_file = "noncontinuing/SafePPO-Discrete-JSQN4.yaml"
     config = parse_config(config_file)
 
@@ -58,7 +59,10 @@ if __name__ == "__main__":
     # initialize actor and critic
     actor, actor_optim = init_actor(config, mid, action_ranges)
     actor.to(config.device)
-    critic = Critic(config.env.flat_state_dim, **config.agent.critic.kwargs.toDict())
+    if config.agent.critic.type == "PopArt":
+        critic = PopArtCritic(config.env.flat_state_dim, **config.agent.critic.kwargs.toDict())
+    else:
+        critic = Critic(config.env.flat_state_dim, **config.agent.critic.kwargs.toDict())
     critic.to(config.device)
     #actor_optim = torch.optim.Adam(actor.parameters(), lr=config.agent.actor.learning_rate)
 
@@ -78,8 +82,11 @@ if __name__ == "__main__":
 
     # Initialize Neural Agent
     if hasattr(config.agent, "lta_agent") and config.agent.lta_agent:
-        agent = LTAPPOAgent(actor, critic, actor_optim, critic_optim, obs_normalizer = obs_normalizer, target_scaler = target_scaler,
-                          **config.agent.kwargs.toDict())
+        if config.agent.critic.type == "PopArt":
+            agent = LTAPPOPOPARTAgent(actor, critic, actor_optim, critic_optim, obs_normalizer = obs_normalizer,  **config.agent.kwargs.toDict())
+        else:
+            agent = LTAPPOAgent(actor, critic, actor_optim, critic_optim, obs_normalizer = obs_normalizer, target_scaler = target_scaler,
+                              **config.agent.kwargs.toDict())
     else:
         agent = PPOAgent(actor, critic, actor_optim, critic_optim, obs_normalizer = obs_normalizer, target_scaler = target_scaler,
                           **config.agent.kwargs.toDict())
