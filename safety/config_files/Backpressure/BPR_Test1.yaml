@@ -21,14 +21,14 @@ agent:
 
 
 env:
-    env_json_path: "/JSON/Environment/Env1/Env1b.json"
+    env_json_path: "/JSON/Environment/Env2d.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false
       record_stats: true
 
 wandb:
-    project: "Env1"
+    project: "Env2d"
     group: ""
 
 

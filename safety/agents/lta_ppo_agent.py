@@ -33,7 +33,6 @@ class LTAPPOAgent:
                  ent_coef: float = 0.0,
                  kl_target: float = None,
                  grad_clip: float = None,
-                 value_clip: float = 1.0,
                  vf_coef: float = 0.5,
                  imit_coef: float = 0.0,
                  pg_coef: float = 1.0,
@@ -42,8 +41,8 @@ class LTAPPOAgent:
                  pretrain_minibatches = 0,
                  pretrain_epochs = 0,
                  omega_norm: bool = False,
-                 clip_adv = False,
-
+                 clip_vloss: bool = False,
+                 vclip_coef: float = 1.0,
                  ):
             # Actor
         self.actor = actor
@@ -80,7 +79,6 @@ class LTAPPOAgent:
         self.ent_coef = ent_coef
         self.kl_target = kl_target
         self.grad_clip = grad_clip
-        self.value_clip = value_clip
         self.vf_coef = vf_coef
         self.imit_coef = imit_coef
         self.pg_coef  = pg_coef
@@ -88,6 +86,9 @@ class LTAPPOAgent:
 
         self.pretrain_minibatches = pretrain_minibatches
         self.pretrain_epochs = pretrain_epochs
+
+        self.clip_vloss= clip_vloss
+        self.vclip_coef = vclip_coef
 
 
 
@@ -334,13 +335,16 @@ class LTAPPOAgent:
 
 
     def compute_critic_loss(self, nn_values, b_targets, bias_factor):
+        v_error = (b_targets-bias_factor-nn_values)
         if self.clip_vloss:
             # clip the value loss
             unclipped_loss = 0.5 * (b_targets - bias_factor - nn_values).pow(2)
-            clipped_diff = torch.clamp(b_targets - bias_factor - nn_values)
+            clipped_diff = torch.clamp(b_targets - bias_factor - nn_values, -self.vclip_coef, self.vclip_coef)
+
         #loss = torch.nn.functional.mse_loss(nn_values , b_targets)
         else:
             mean_loss = 0.5 * (b_targets - bias_factor - nn_values).pow(2).mean()
+            mean_loss = 0.5 * v_error.pow(2).mean()
         return mean_loss
 
 

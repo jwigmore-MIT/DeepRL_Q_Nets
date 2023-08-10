@@ -38,7 +38,7 @@ if __name__ == "__main__":
     #config_file = "continuing/SafeLTAPPO-Gaussian-Env1b.yaml"
     #config_file = "PPO-TanGaussian-Env1b.yaml"
     #config_file = "SafePPO-TanGaussian-Env1b.yaml"
-    config_file = "continuing/SafeLTAPPO-POPART-Discrete-JSQN2S2.yaml"
+    config_file = "continuing/SafeLTAPPO-TanGaussian-Env2d.yaml"
     #config_file = "noncontinuing/SafePPO-Discrete-JSQN4.yaml"
     config = parse_config(config_file)
 
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     # initialize actor and critic
     actor, actor_optim = init_actor(config, mid, action_ranges)
     actor.to(config.device)
-    if config.agent.critic.type == "PopArt":
+    if hasattr(config.agent.critic, "type") and config.agent.critic.type == "PopArt":
         critic = PopArtCritic(config.env.flat_state_dim, **config.agent.critic.kwargs.toDict())
     else:
         critic = Critic(config.env.flat_state_dim, **config.agent.critic.kwargs.toDict())
@@ -82,7 +82,7 @@ if __name__ == "__main__":
 
     # Initialize Neural Agent
     if hasattr(config.agent, "lta_agent") and config.agent.lta_agent:
-        if config.agent.critic.type == "PopArt":
+        if hasattr(config.agent.critic, "type") and config.agent.critic.type == "PopArt":
             agent = LTAPPOPOPARTAgent(actor, critic, actor_optim, critic_optim, obs_normalizer = obs_normalizer,  **config.agent.kwargs.toDict())
         else:
             agent = LTAPPOAgent(actor, critic, actor_optim, critic_optim, obs_normalizer = obs_normalizer, target_scaler = target_scaler,

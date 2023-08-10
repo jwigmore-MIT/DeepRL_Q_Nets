@@ -17,12 +17,13 @@ load:
 buffer:
   size: 1.0e+8
 normalizers:
+  obs_scale_factor: 2.0
   obs:
     type: Fixed
     norm_factor: 20
     eps: 1.0e-6
   target:
-    update_rate: 0.2
+    update_rate: ~
     eps: 1.0e-6
 
 agent:
@@ -32,7 +33,7 @@ agent:
   lta_agent: true
   actor:
     type: "TanGaussian"
-    learning_rate: 1.0e-03
+    learning_rate: 3.0e-04
     std_learning_rate: 3.0e-04
     kwargs:
       hidden_dim: 64
@@ -41,32 +42,38 @@ agent:
       hidden_layers: 2
   safety:
     safe_policy: "BP"
-    trigger_state: 20
+    trigger_state: 22
     args:
       M: "R"
   critic:
+    type: "PopArt"
     learning_rate: 3.0e-03
     kwargs:
-        hidden_dim: 128
+        hidden_dim: 64
         activation: "tanh"
         hidden_layers: 2
+        beta: 0.1
   n_epochs: 10
   kwargs:
+    recompute_adv: true
     update_epochs: 10 # number of updates to perform per batch
     minibatches: 4 # number of minibatches to break the data up into
     alpha: 0.2
-    nu: 0.5
+    nu: 0.
     gae_lambda: 0.95
-    clip_coef: 0.2
+    clip_coef: 0.1
     kl_coef: 0.0
     ent_coef: 0.0
     kl_target: 1
     grad_clip: 10
-    value_clip: 1
+    clip_vloss: false
+    vclip_coef: 1.0
     vf_coef: 0.5
     imit_coef: 0.0
-    pg_coef: 10.0
+    pg_coef: 1.0
     int_coef: 0.0
+    pretrain_minibatches: 1
+    pretrain_epochs: 1
 
 
 env:
@@ -75,17 +82,18 @@ env:
       normalize_obs: false
       normalize_reward: false
       record_stats: true
-      scale_reward: -50.0
+      scale_reward: ~
 
 wandb:
-    project: "ArchitectureTesting"
-    group: ~
+    project: "Env1b"
+    group: "PopArt"
 
 
 train:
-  num_episodes: 5000
+  num_episodes: 1000
   batch_size: 512
   reset: false
+  pretrain_steps: 1000
 
 eval:
   n_eval_episodes: 10

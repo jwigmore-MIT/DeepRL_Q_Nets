@@ -12,6 +12,7 @@ class Critic(nn.Module):
         hidden_dim: int,
         hidden_layers: int = 2,
         activation: str = "tanh",
+        beta: float= 4e-4,
     ):
         super().__init__()
         # self._mlp = nn.Sequential(

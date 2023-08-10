@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import os
 
 th = pickle.load(open("JRQ_Test_History_0802.pkl", "rb"))
-th = pickle.load(open("JSQ_Test_History_0802.pkl", "rb"))
+#th = pickle.load(open("JSQ_Test_History_0802.pkl", "rb"))
 
 JSQ_Mean = 4.8
 JRQ_Mean = 14.98

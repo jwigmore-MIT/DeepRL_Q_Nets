@@ -32,8 +32,8 @@ from safety.utils import visualize_buffer
 if __name__ == "__main__":
 
     # === Init Config === #
-    config_file = "Backpressure/JSQ_Test1.yaml"
-    #config_file = "Backpressure/JRQ_Test1.yaml"
+    #config_file = "Backpressure/JSQ_Test1.yaml"
+    config_file = "Backpressure/JRQ_Test1.yaml"
     config = parse_config(config_file, run_type="TEST")
 
     # === Init Environment === #
@@ -51,8 +51,10 @@ if __name__ == "__main__":
     env.reset()
     test_history = None
     pbar = tqdm(range(config.eval.n_eval_episodes), desc=f"Testing episodes")
+    obs_history = []
     for eps in pbar:
         rollout = gen_rollout(env, agent, length=config.eval.episode_length, reset = False, show_progress = False)
+        obs_history.append(rollout["obs"])
         test_history, test_lta_reward = log_rollouts(rollout, glob="test", history=test_history)
         log_rollout_summary(rollout, eps, glob="test")
 

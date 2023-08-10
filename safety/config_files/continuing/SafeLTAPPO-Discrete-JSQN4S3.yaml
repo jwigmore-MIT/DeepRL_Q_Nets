@@ -68,7 +68,9 @@ agent:
     ent_coef: 1.0
     kl_target: 1
     grad_clip: 10
-    value_clip: 1
+    vclip_coef: 1
+    clip_vloss: false
+
     vf_coef: 0.5
     imit_coef: 0.0
     pg_coef: 1.0
@@ -97,7 +99,7 @@ train:
   num_episodes: 10000
   batch_size: 1024
   reset: false
-  pretrain_steps: 30000
+  pretrain_steps: 5000
 
 
 eval:

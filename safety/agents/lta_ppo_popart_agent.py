@@ -33,6 +33,9 @@ class LTAPPOPOPARTAgent:
                  ent_coef: float = 0.0,
                  kl_target: float = None,
                  grad_clip: float = None,
+                 vgrad_clip: float = None,
+                 clip_vloss: bool = False,
+                 vclip_coef: float = 1.0,
                  value_clip: float = 1.0,
                  vf_coef: float = 0.5,
                  imit_coef: float = 0.0,
@@ -80,7 +83,9 @@ class LTAPPOPOPARTAgent:
         self.ent_coef = ent_coef
         self.kl_target = kl_target
         self.grad_clip = grad_clip
-        self.value_clip = value_clip
+        self.vgrad_clip = vgrad_clip
+        self.clip_vloss = clip_vloss
+        self.vclip_coef = vclip_coef
         self.vf_coef = vf_coef
         self.imit_coef = imit_coef
         self.pg_coef  = pg_coef
@@ -241,8 +246,8 @@ class LTAPPOPOPARTAgent:
             rewards = torch.Tensor(rewards)
 
             # Compute advantages
-            b_advantages = self.compute_TD_advantages(rewards, b_values, b_next_value)
-
+            #b_advantages = self.compute_TD_advantages(rewards, b_values, b_next_value)
+            b_advantages = self.compute_GAE(rewards, b_values, b_next_value, dones)
             # Compute the "true" targets
             b_targets = b_advantages + b_values
 
@@ -264,12 +269,17 @@ class LTAPPOPOPARTAgent:
 
     def update_critic_mb(self, mb_obs, mb_norm_targets, mb_targets):
         new_values, new_norm_values = self.critic(mb_obs)
-        #bias_factor = self.b*self.nu
-        critic_loss = self.compute_critic_loss(new_norm_values, mb_norm_targets)
+        bias_factor = self.b*self.nu
+        critic_loss = self.compute_critic_loss(new_norm_values, mb_norm_targets, bias_factor)
 
         self.critic_optimizer.zero_grad()
+
         critic_loss.backward()
+        if self.vgrad_clip is not None:
+            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.vgrad_clip)
         self.critic_optimizer.step()
+        vg_magnitude = torch.norm(
+            torch.stack([torch.norm(p.grad.detach(), 2.0) for p in list(self.critic.parameters())]), 2.0)
 
         # === Logging === #
         # Compute errors
@@ -288,32 +298,35 @@ class LTAPPOPOPARTAgent:
 
 
         return {"critic_loss": critic_loss.item(),
-                "max_critic_dev: ": max_critic_dev,
-                "avg_critic_error: ": critic_errors.abs().mean().item(),
-                "avg_critic_true_error: ": true_errors.abs().mean().item(),
-                "explained_variance": explained_variance.item(),
+                "vg_magnitude": vg_magnitude.item(),
+                "max_true_critic_dev: ": max_critic_dev,
+                "avg_norm_critic_error: ": critic_errors.abs().mean().item(),
+                "avg_true_critic_error: ": true_errors.abs().mean().item(),
+                "explained_true_variance": explained_variance.item(),
                 "explained_norm_variance": explained_norm_variance.item(),
                 "eta": self.eta,
-                "mb_targets": mb_targets.mean().item(),
-                "mb_values": new_values.mean().item(),
+                "mb_true_targets": mb_targets.mean().item(),
+                "mb_true_values": new_values.mean().item(),
                 "mb_norm_targets": mb_norm_targets.mean().item(),
                 "mb_norm_values": new_norm_values.mean().item(),
                 "mu": self.critic.mu.item(),
                 "sigma": self.critic.sigma.item(),
                 "b": self.b}
 
-
-
-
-    def compute_critic_loss(self, nn_values, b_targets, bias_factor = 0):
-        if False:
-            # clip the value loss
-            unclipped_loss = 0.5 * (b_targets - bias_factor - nn_values).pow(2)
-            clipped_diff = torch.clamp(b_targets - bias_factor - nn_values)
-        #loss = torch.nn.functional.mse_loss(nn_values , b_targets)
-        else:
-            sum_loss = 0.5 * (b_targets - bias_factor - nn_values).pow(2).sum()
-        return sum_loss
+    def compute_critic_loss(self, nn_values, b_targets, bias_factor):
+        v_error = (b_targets - bias_factor - nn_values)
+        # if self.clip_vloss:
+        #     # clip the value loss
+        #     unclipped_loss = 0.5 * (b_targets - bias_factor - nn_values).pow(2)
+        #     clipped_diff = torch.clamp(b_targets - bias_factor - nn_values, -self.vclip_coef, self.vclip_coef)
+        #
+        # # loss = torch.nn.functional.mse_loss(nn_values , b_targets)
+        # else:
+        #     mean_loss = 0.5 * (b_targets - bias_factor - nn_values).pow(2).mean()
+        #     mean_loss = 0.5 * v_error.pow(2).mean()
+        mean_loss = 0.5 * (b_targets - bias_factor - nn_values).pow(2).mean()
+        mean_loss = 0.5 * v_error.pow(2).mean()
+        return mean_loss
 
 
     def compute_GAE(self, rewards, values, next_val, dones = None):
@@ -327,7 +340,7 @@ class LTAPPOPOPARTAgent:
                     next_value = next_val
                 else:
                     next_value = values[t + 1]
-                delta = (rewards[t] - self.eta) / self.omega + self.gamma * next_value - values[t]
+                delta = (rewards[t] - self.eta)  + self.gamma * next_value - values[t]
                 #self.omega = 8
                 adv[t] = last_gae_lam =  delta +  self.gamma * self.gae_lambda* last_gae_lam
         # if self.clip_adv:
