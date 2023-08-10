@@ -130,7 +130,10 @@ class MultiClassMultiHop(gym.Env):
         if config is not None:
             setattr(config.env, "flat_state_dim", self.obs_space_size)
             setattr(config.env, "flat_action_dim", self.action_space_size)
-        self._seed = config.seed
+        if net_para is not None:
+            self._seed = net_para.get('seed', 0)
+        else:
+            self._seed = config.seed
         self.reset(seed=self._seed)
 
     def _make_graph(self):

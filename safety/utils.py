@@ -13,19 +13,19 @@ pio.renderers.default = "browser"
 from plotly.subplots import make_subplots
 import sys
 
-def parse_cleanrl_config(config_file_name: str, run_type = "TRAIN"):
-    working_dir = os.path.dirname(os.path.abspath(__file__))  # directory root i.e. DeepRL_Q_Nets/SB3
-    config_file = os.path.join(working_dir, "config_files", config_file_name)  # full path to config file
-    # parse the config file
-    with open(config_file, 'r') as f:
-        config_dict = yaml.load(f, Loader=yaml.FullLoader)
-
-    # convert to Munch object
-    config = Munch.fromDict(config_dict)
-    config.env_id = config.env.env_json_path.split("/")[-1].split(".")[0]
-    config.root_dir = os.path.dirname(working_dir)
-
-    return config
+# def parse_cleanrl_config(config_file_name: str, run_type = "TRAIN"):
+#     working_dir = os.path.dirname(os.path.abspath(__file__))  # directory root i.e. DeepRL_Q_Nets/SB3
+#     config_file = os.path.join(working_dir, "config_files", config_file_name)  # full path to config file
+#     # parse the config file
+#     with open(config_file, 'r') as f:
+#         config_dict = yaml.load(f, Loader=yaml.FullLoader)
+#
+#     # convert to Munch object
+#     config = Munch.fromDict(config_dict)
+#     config.env_id = config.env.env_json_path.split("/")[-1].split(".")[0]
+#     config.root_dir = os.path.dirname(working_dir)
+#
+#     return config
 
 def parse_config(config_file_name: str, run_type = "TRAIN"):
     """
@@ -66,6 +66,46 @@ def parse_config(config_file_name: str, run_type = "TRAIN"):
 
 
     return config
+
+def clean_rl_ppo_parse_config(config_file_name: str, run_type = "TRAIN"):
+    """
+    Parses the config file
+    """
+    working_dir = os.path.dirname(os.path.abspath(__file__)) # directory root i.e. DeepRL_Q_Nets/SB3
+    config_file = os.path.join(working_dir, "config_files", config_file_name) # full path to config file
+    # parse the config file
+    with open(config_file, 'r') as f:
+        config_dict = yaml.load(f, Loader=yaml.FullLoader)
+
+    # convert to Munch object
+    args = Munch.fromDict(config_dict)
+
+    args.batch_size = int(args.num_envs * args.num_steps)
+    args.minibatch_size = int(args.batch_size // args.num_minibatches)
+    # Extract env name
+    args.env_name = args.env_json_path.split("/")[-1].split(".")[0]
+
+    # Create run name
+    args.run_name = args.policy_name + "_" + args.env_name + "_"  + run_type + "_" + datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    # Artifact Name
+    args.artifact_name = args.policy_name + "_" + args.env_name + "_" + "agent"
+
+    # Agent Save directory
+
+    # Set root directory
+    args.root_dir = os.path.dirname(working_dir)
+
+    # check if the policy is backpressure
+    args.BP = True if args.policy_name.__contains__("BP") else False
+
+    # check to save models
+    if args.save_models and run_type == "TRAIN":
+        args.save_dir = os.path.join(working_dir, "saved_models", args.run_name)
+        os.makedirs(args.save_dir, exist_ok=True)
+
+    args.debug = debugger_is_active()
+    return args
 
 def debugger_is_active() -> bool:
     """Return if the debugger is currently active"""

@@ -35,7 +35,7 @@ def parse_env_json(json_path, config_args = None):
                 setattr(config_args.env, f"{key}", value)
         else:
             for key, value in env_para.items():
-                setattr(config_args, f"env/{key}", value)
+                setattr(config_args, f"env.{key}", value)
     return env_para
 
 def parse_test_json(json_path, config_args):

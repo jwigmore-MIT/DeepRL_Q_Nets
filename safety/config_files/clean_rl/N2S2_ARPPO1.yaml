@@ -1,0 +1,38 @@
+
+exp_name: "N2S2_CleanRL"
+seed: 5031997
+torch_deterministic: true
+cuda: false
+track: true
+wandb_project_name: "Clean_RL_N2S2"
+capture_video: false
+policy_name: "PPO"
+save_models: true
+notes: For Clean RL based standard PPO implementation (discounted rewards)
+
+
+env_json_path: "/JSON/Environment/ServerAllocation/N2S2.json"
+total_timesteps: 500000
+learning_rate: 2.5e-4
+num_envs: 1
+num_steps: 128
+anneal_lr: true
+gamma: 1.0
+gae_lambda: 0.95
+num_minibatches: 4
+update_epochs: 4
+norm_adv: true
+clip_coef: 0.2
+clip_vloss: false
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+target_kl: ~
+alpha: 0.1
+nu: 0.0
+
+reward_scale: .001
+obs_scale: 0.01
+
+
+
