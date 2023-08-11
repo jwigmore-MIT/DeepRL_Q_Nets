@@ -10,6 +10,8 @@ Difference from ARPPO:
 
 
 
+
+
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppopy
 import argparse
 import os
@@ -24,10 +26,12 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
+
+# my imports
 from Environments.ServerAllocation import generate_clean_rl_env
 from safety.utils import clean_rl_ppo_parse_config
-
 from tqdm import tqdm
+from safety.clean_rl_utils import observation_checker
 
 
 
@@ -68,9 +72,9 @@ class Agent(nn.Module):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl/N4S3_IA_ARPPO1.yaml"
+    config_file = "clean_rl/N8S1/N8S1_IA_AR_PPO.yaml"
     args = clean_rl_ppo_parse_config(config_file)
-    run_name = f"{args.env_name}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"[{args.policy_name}] {args.env_name} - {int(time.time())}"
     if args.track:
         import wandb
 
@@ -137,6 +141,7 @@ if __name__ == "__main__":
         # Generate Trajectory
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
+            observation_checker(next_obs)
             obs[step] = next_obs
             dones[step] = next_done
 
@@ -268,6 +273,7 @@ if __name__ == "__main__":
             "update_info/clipfrac": np.mean(clipfracs),
             "update_info/loss": loss.item(),
             "update_info/policy_gradient_loss": pg_loss.item(),
+            "update_info/unclipped_policy_gradient_loss": pg_loss1.mean().item(),
             "update_info/value_loss": v_loss.item(),
             "update_info/avg_value": b_values.mean().item(),
             "update_info/critic_error": error.mean(),

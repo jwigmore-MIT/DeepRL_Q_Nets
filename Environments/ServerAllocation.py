@@ -188,8 +188,11 @@ def generate_clean_rl_env(config, normalize = True):
         env_para["seed"] = config.seed
         env = ServerAllocation(env_para)
         if normalize:
+            # check to make sure obs_scale is greater than 1
+            if config.obs_scale < 1:
+                raise ValueError("config.obs_scale must be greater than 1")
             env = gym.wrappers.TransformReward(env, lambda x: x*config.reward_scale)
-            env = gym.wrappers.TransformObservation(env, lambda x: x*config.obs_scale)
+            env = gym.wrappers.TransformObservation(env, lambda x: 2*x/config.obs_scale-1)
         return env
     return thunk
 

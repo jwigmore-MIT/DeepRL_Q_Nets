@@ -22,10 +22,12 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
-from Environments.ServerAllocation import generate_clean_rl_env
-from safety.utils import clean_rl_ppo_parse_config
+
 
 from tqdm import tqdm
+from Environments.ServerAllocation import generate_clean_rl_env
+from safety.utils import clean_rl_ppo_parse_config
+from safety.clean_rl_utils import observation_checker
 
 
 
@@ -134,6 +136,7 @@ if __name__ == "__main__":
         # Generate Trajectory
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
+            observation_checker(next_obs)
             obs[step] = next_obs
             dones[step] = next_done
 

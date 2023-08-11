@@ -16,6 +16,7 @@ from Environments.ServerAllocation import generate_clean_rl_env
 from safety.utils import clean_rl_ppo_parse_config
 
 from tqdm import tqdm
+from safety.clean_rl_utils import observation_checker
 
 
 
@@ -56,7 +57,7 @@ class Agent(nn.Module):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl/N4S3_PPO1.yaml"
+    config_file = "clean_rl/N8S1/N8S1_PPO.yaml"
     args = clean_rl_ppo_parse_config(config_file)
     run_name = f"{args.env_name}__{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
@@ -120,6 +121,7 @@ if __name__ == "__main__":
         # Generate Trajectory
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
+            observation_checker(next_obs)
             obs[step] = next_obs
             dones[step] = next_done
 

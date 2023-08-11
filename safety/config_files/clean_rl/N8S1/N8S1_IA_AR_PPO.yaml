@@ -1,0 +1,40 @@
+
+exp_name: "N2S2_CleanRL"
+seed: 5031997
+torch_deterministic: true
+cuda: false
+track: true
+wandb_project_name: "N8S1"
+capture_video: false
+policy_name: "IA-ARPPO"
+save_models: true
+notes: For Clean RL based standard PPO implementation (discounted rewards)
+
+
+env_json_path: "/JSON/Environment/ServerAllocation/N8/N8S1.json"
+total_timesteps: 5000000
+learning_rate: 3.0e-4
+num_envs: 1
+num_steps: 256
+anneal_lr: false
+gamma: 1.0
+gae_lambda: 0.95
+num_minibatches: 4
+update_epochs: 10
+norm_adv: true
+clip_coef: 0.2
+clip_vloss: false
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+target_kl: ~
+alpha: 0.1
+nu: 0.0
+
+reward_scale: .005
+obs_scale: 50
+
+int_thresh: 25
+
+
+
