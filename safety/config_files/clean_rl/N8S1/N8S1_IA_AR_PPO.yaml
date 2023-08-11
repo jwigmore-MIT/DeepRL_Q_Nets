@@ -21,7 +21,7 @@ gamma: 1.0
 gae_lambda: 0.95
 num_minibatches: 4
 update_epochs: 10
-norm_adv: false
+norm_adv: true
 clip_coef: 0.2
 clip_vloss: false
 ent_coef: 0.01
@@ -30,6 +30,7 @@ max_grad_norm: 0.5
 target_kl: ~
 alpha: 0.1
 nu: 0.0
+temperature: 0.9
 
 reward_scale: .001
 obs_scale: 50

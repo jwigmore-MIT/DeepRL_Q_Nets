@@ -42,8 +42,9 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, envs):
+    def __init__(self, envs, temperature=1.0):
         super().__init__()
+        self.temperature = temperature
         self.critic = nn.Sequential(
             layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
             nn.Tanh(),
@@ -59,16 +60,18 @@ class Agent(nn.Module):
             layer_init(nn.Linear(64, envs.single_action_space.n), std=0.01),
         )
 
+
     def get_value(self, x):
         return self.critic(x)
 
     def get_action_and_value(self, x, action=None):
 
-        logits = self.actor(x)
+        logits = self.actor(x)/self.temperature
         probs = Categorical(logits=logits)
         if action is None:
             action = probs.sample()
         return action, probs.log_prob(action), probs.entropy(), self.critic(x)
+
 
 
 if __name__ == "__main__":
@@ -106,8 +109,10 @@ if __name__ == "__main__":
         [generate_clean_rl_env(args) for i in range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
-
-    agent = Agent(envs).to(device)
+    if hasattr(args, 'temperature'):
+        agent = Agent(envs, temperature = args.temperature).to(device)
+    else:
+        agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
@@ -187,6 +192,7 @@ if __name__ == "__main__":
             window_backlogs = total_backlogs[global_step - args.window_size:global_step]
             window_average_backlog = np.mean(window_backlogs)
             writer.add_scalar("window_average_backlog", window_average_backlog, global_step)
+        else: window_average_backlog = None
 
 
         # Update Average Reward Variables
@@ -307,6 +313,7 @@ if __name__ == "__main__":
 
             "rollout/backlog": np.mean(backlogs[:global_step]),
             "rollout/time_averaged_backlog": time_averaged_backlog,
+            "rollout/window_average_backlog": window_average_backlog,
             "rollout/rewards": np.mean(rewards.cpu().numpy()),
             "rollout/episode": update,
             "rollout/intervention_rate": interventions.mean().item(),
