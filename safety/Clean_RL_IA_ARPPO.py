@@ -248,7 +248,7 @@ if __name__ == "__main__":
                 else:
                     v_loss = 0.5 * ((newvalue - b_returns[mb_inds]-bias_factor) ** 2).mean()
 
-                entropy_loss = (entropy*(1-mb_interventions)).sum()/(1-mb_interventions).sum()
+                entropy_loss = (entropy*(1-mb_interventions)).sum()/torch.clamp((1-mb_interventions).sum(), min = 1)
                 loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
 
                 optimizer.zero_grad()
@@ -269,10 +269,11 @@ if __name__ == "__main__":
         log_dict = {
             "update_info/learning_rate": optimizer.param_groups[0]["lr"],
             "update_info/entropy_loss": entropy_loss.item(),
-            "update_info/approx_kl": approx_kl.item(),
+            "update_info/approx_abs_kl": approx_kl.abs().item(),
             "update_info/clipfrac": np.mean(clipfracs),
             "update_info/loss": loss.item(),
             "update_info/policy_gradient_loss": pg_loss.item(),
+            "update_info/absolute_gradient_loss": pg_loss.abs().item(),
             "update_info/unclipped_policy_gradient_loss": pg_loss1.mean().item(),
             "update_info/value_loss": v_loss.item(),
             "update_info/avg_value": b_values.mean().item(),
