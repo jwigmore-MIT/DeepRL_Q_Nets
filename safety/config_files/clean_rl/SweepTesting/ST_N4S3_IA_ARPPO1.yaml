@@ -4,18 +4,18 @@ seed: 5031997
 torch_deterministic: true
 cuda: false
 track: true
-wandb_project_name: "N8S1"
+wandb_project_name: "SweepTesting"
 capture_video: false
-policy_name: "IA-ARPPO"
+policy_name: "IA_ARPPO"
 save_models: true
 notes: For Clean RL based standard PPO implementation (discounted rewards)
 
 
-env_json_path: "/JSON/Environment/ServerAllocation/N8/N8S1.json"
-total_timesteps: 5000000
+env_json_path: "/JSON/Environment/ServerAllocation/N4/N4S3.json"
+total_timesteps: 1000000
 learning_rate: 1.0e-4
 num_envs: 1
-num_steps: 256
+num_steps: 512
 anneal_lr: false
 gamma: 1.0
 gae_lambda: 0.95
@@ -32,11 +32,11 @@ alpha: 0.1
 nu: 0.0
 
 reward_scale: .001
-obs_scale: 50
+obs_scale: 40
 
-int_thresh: 25
+int_thresh: 20
 
-window_size: 10000
+window_size: 1000
 
 
 

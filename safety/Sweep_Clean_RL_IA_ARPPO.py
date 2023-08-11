@@ -72,26 +72,27 @@ class Agent(nn.Module):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl/N8S1/N8S1_IA_AR_PPO.yaml"
-
+    #config_file = "clean_rl/SweepTesting/ST_N4S3_IA_ARPPO1.yaml"
+    config_file = None
     args = parse_args_or_config(config_file)
     run_name = f"[{args.policy_name}] {args.env_name} - {int(time.time())}"
-    if args.track:
-        import wandb
-
-        wandb.init(
-            project=args.wandb_project_name,
-            sync_tensorboard=True,
-            config=vars(args),
-            name=run_name,
-            monitor_gym=True,
-            save_code=True,
-        )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
+    if args.track:
+        import wandb
+
+        wandb.init(
+            project=args.wandb_project_name,
+            sync_tensorboard=False,
+            config=vars(args),
+            name=run_name,
+            monitor_gym=True,
+            save_code=True,
+        )
+
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -319,3 +320,4 @@ if __name__ == "__main__":
 
     envs.close()
     writer.close()
+    wandb.finish()
