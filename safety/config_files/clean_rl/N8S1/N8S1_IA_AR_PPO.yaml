@@ -2,7 +2,7 @@
 exp_name: "N2S2_CleanRL"
 seed: 5031997
 torch_deterministic: true
-cuda: false
+cuda: true
 track: true
 wandb_project_name: "N8S1"
 capture_video: false
@@ -12,10 +12,10 @@ notes: For Clean RL based standard PPO implementation (discounted rewards)
 
 
 env_json_path: "/JSON/Environment/ServerAllocation/N8/N8S1.json"
-total_timesteps: 5000000
+total_timesteps: 1.0e+7
 learning_rate: 1.0e-4
 num_envs: 1
-num_steps: 256
+num_steps: 1024
 anneal_lr: false
 gamma: 1.0
 gae_lambda: 0.95
@@ -29,9 +29,12 @@ vf_coef: 0.5
 max_grad_norm: 0.5
 target_kl: ~
 alpha: 0.1
-nu: 0.0
+nu: -0.1
 temperature: 0.1
 learn_temperature: false
+
+hidden_size: 64
+hidden_depth: 2
 
 reward_scale: .001
 obs_scale: 50

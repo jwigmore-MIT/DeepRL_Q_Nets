@@ -14,7 +14,7 @@ tuner = Tuner(
         "num-steps": trial.suggest_categorical("num-steps", [64, 128, 256, 512]),
         "learning-rate": trial.suggest_loguniform("learning-rate", 1e-5, 1e-3),
         "norm-adv": trial.suggest_categorical("norm-adv", [True, False]),
-        "reward-scale": trial.suggest_categorical("reward-scale", [0.00001, 0.0001, 0.001, 0.1]),
+        "reward-scale": trial.suggest_categorical("reward-scale", [0.0005, 0.001, 0.1]),
         "alpha": trial.suggest_categorical("alpha", [0.1, 0.2]),
         "nu": trial.suggest_categorical("nu", [0.0, -0.1, -0.3, -1.0]),
         # Not Swept
@@ -33,5 +33,5 @@ tuner = Tuner(
 )
 tuner.tune(
     num_trials=100,
-    num_seeds=3,
+    num_seeds=1,
 )

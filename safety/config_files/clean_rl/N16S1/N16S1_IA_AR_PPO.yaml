@@ -32,7 +32,10 @@ alpha: 0.1
 nu: -0.1
 temperature: 0.5
 learn_temperature: true
-intervention_penalty: 0.05
+intervention_penalty: 0.0
+
+hidden_size: 128
+hidden_depth: 2
 
 reward_scale: .001
 obs_scale: 100
