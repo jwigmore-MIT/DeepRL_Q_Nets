@@ -7,7 +7,7 @@ import torch
 from tqdm import tqdm
 
 run_type = "JSQ"
-config_file = "clean_rl/N12S1/N12S1_IA_AR_PPO.yaml"
+config_file = "clean_rl/N4A1/N4A1_IA_AR_PPO.yaml"
 args = clean_rl_ppo_parse_config(config_file)
 env = generate_clean_rl_env(args, normalize = False)()
 

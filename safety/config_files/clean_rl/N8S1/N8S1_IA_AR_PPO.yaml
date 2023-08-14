@@ -15,7 +15,7 @@ env_json_path: "/JSON/Environment/ServerAllocation/N8/N8S1.json"
 total_timesteps: 1.0e+7
 learning_rate: 1.0e-4
 num_envs: 1
-num_steps: 1024
+num_steps: 256
 anneal_lr: false
 gamma: 1.0
 gae_lambda: 0.95

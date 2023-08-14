@@ -34,7 +34,7 @@ temperature: 0.5
 learn_temperature: true
 intervention_penalty: 0.0
 
-hidden_size: 128
+hidden_size: 64
 hidden_depth: 2
 
 reward_scale: .001
