@@ -86,7 +86,12 @@ class Agent(nn.Module):
 if __name__ == "__main__":
     config_file = "clean_rl/N12S1/N12S1_IA_AR_PPO.yaml"
 
+
     args = parse_args_or_config(config_file)
+    args.device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    args.total_timesteps = int(args.total_timesteps)
+    if args.nu > 0:
+        raise NotImplementedError("nu > 0, nu should be negative!!!!")
     run_name = f"[{args.policy_name}] {args.env_name} - {int(time.time())}"
     if args.track:
         import wandb
@@ -117,11 +122,19 @@ if __name__ == "__main__":
     envs = gym.vector.SyncVectorEnv(
         [generate_clean_rl_env(args) for i in range(args.num_envs)]
     )
+    if hasattr(args, 'hidden_size'):
+        hidden_size = args.hidden_size
+        hidden_depth = args.hidden_depth
+    else:
+        hidden_size = 64
+        hidden_depth = 2
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
     if hasattr(args, 'temperature'):
-        agent = Agent(envs, temperature = args.temperature, learn_temperature=args.learn_temperature).to(device)
+        learn_temperature = args.learn_temperature if hasattr(args, 'learn_temperature') else False
+        agent = Agent(envs, temperature = args.temperature, learn_temperature=learn_temperature,
+                      hidden_size=hidden_size, hidden_depth = hidden_depth).to(device)
     else:
-        agent = Agent(envs).to(device)
+        agent = Agent(envs, hidden_size=hidden_size, hidden_depth = hidden_depth).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
@@ -166,7 +179,7 @@ if __name__ == "__main__":
                 reward_penalty = - args.intervention_penalty
                 buffers = envs.get_attr("get_obs")[0][1:-1]
                 np_action = np.argmin(buffers)
-                action = torch.Tensor([np_action])
+                action = torch.Tensor([np_action]).to(device)
                 #action = torch.Tensor(np.argmin(buffers)).to(device)
                 with torch.no_grad():
                     _, log_prob, _, value = agent.get_action_and_value(next_obs, action)
