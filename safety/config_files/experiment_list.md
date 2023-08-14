@@ -15,3 +15,6 @@ IA-AR_PPO on 16 Node symmetric system with Temperature = 1, 0.1, 0.01
 
 ## Created 8.14 11:46am
 IA-AR_PPO on 4 Node with learned temperature
+
+## Created 8.14 12:29pm
+8 Node symmetric with value bias negation

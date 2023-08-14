@@ -40,5 +40,8 @@ int_thresh: 25
 
 window_size: 10000
 
+test_steps: 1.0e5
+test_log_interval: 1000
+
 
 
