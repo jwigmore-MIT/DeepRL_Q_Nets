@@ -15,7 +15,7 @@ env_json_path: "/JSON/Environment/ServerAllocation/N16/N16S1.json"
 total_timesteps: 5000000
 learning_rate: 1.0e-4
 num_envs: 1
-num_steps: 256
+num_steps: 512
 anneal_lr: false
 gamma: 1.0
 gae_lambda: 0.95
@@ -29,11 +29,13 @@ vf_coef: 0.5
 max_grad_norm: 0.5
 target_kl: ~
 alpha: 0.1
-nu: 0.0
-temperature: 0.3
+nu: -0.1
+temperature: 0.5
+learn_temperature: true
+intervention_penalty: 0.05
 
 reward_scale: .001
-obs_scale: 50
+obs_scale: 100
 
 int_thresh: 25
 

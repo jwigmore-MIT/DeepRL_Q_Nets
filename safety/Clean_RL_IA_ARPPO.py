@@ -42,27 +42,32 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, envs, temperature=1.0, learn_temperature=False):
+    def __init__(self, envs, temperature=1.0, learn_temperature=False, hidden_size=64, hidden_depth=2):
         super().__init__()
         if learn_temperature:
             self.temperature = nn.Parameter(torch.ones(1)*temperature)
         else:
             self.temperature = temperature
 
-        self.critic = nn.Sequential(
-            layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, 1), std=1.0),
-        )
-        self.actor = nn.Sequential(
-            layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, envs.single_action_space.n), std=0.01),
-        )
+        # Critic
+        in_dim = np.array(envs.single_observation_space.shape).prod()
+        critic_layers = []
+        for i in range(hidden_depth):
+            critic_layers.append(layer_init(nn.Linear(in_dim, hidden_size)))
+            critic_layers.append(nn.Tanh())
+            in_dim = hidden_size
+        critic_layers.append(layer_init(nn.Linear(in_dim, 1), std=1.0))
+        self.critic = nn.Sequential(*critic_layers)
+       # Actor
+        in_dim = np.array(envs.single_observation_space.shape).prod()
+        out_dim = envs.single_action_space.n
+        actor_layers = []
+        for i in range(hidden_depth):
+            actor_layers.append(layer_init(nn.Linear(in_dim, hidden_size)))
+            actor_layers.append(nn.Tanh())
+            in_dim = hidden_size
+        actor_layers.append(layer_init(nn.Linear(in_dim, out_dim), std=0.01))
+        self.actor = nn.Sequential(*actor_layers)
 
 
     def get_value(self, x):
@@ -79,7 +84,7 @@ class Agent(nn.Module):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl/N8S1/N8S1_IA_AR_PPO.yaml"
+    config_file = "clean_rl/N16S1/N16S1_IA_AR_PPO.yaml"
 
     args = parse_args_or_config(config_file)
     run_name = f"[{args.policy_name}] {args.env_name} - {int(time.time())}"
@@ -158,6 +163,7 @@ if __name__ == "__main__":
             dones[step] = next_done
 
             if envs.get_attr("get_backlog")[0] > args.int_thresh: #minus one to account for the source packet
+                reward_penalty = - args.intervention_penalty
                 buffers = envs.get_attr("get_obs")[0][1:-1]
                 np_action = np.argmin(buffers)
                 action = torch.Tensor([np_action])
@@ -167,7 +173,7 @@ if __name__ == "__main__":
                     values[step] = value.flatten()
                     interventions[step] = torch.Tensor([1]).to(device)
             else:
-                # ALGO LOGIC: action logic
+                reward_penalty = 0
                 with torch.no_grad():
                     action, logprob, _, value = agent.get_action_and_value(next_obs)
                     values[step] = value.flatten()
@@ -178,7 +184,7 @@ if __name__ == "__main__":
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, terminated, truncated, info = envs.step(action.cpu().numpy())
             done = terminated | truncated
-            rewards[step] = torch.tensor(reward).to(device).view(-1)
+            rewards[step] = torch.tensor(reward+reward_penalty).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
             backlogs[step] = info['backlog'][0]
             sum_backlogs += info['backlog'][0]
