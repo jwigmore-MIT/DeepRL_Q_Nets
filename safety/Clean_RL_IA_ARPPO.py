@@ -84,7 +84,7 @@ class Agent(nn.Module):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl/N16S1/N16S1_IA_AR_PPO.yaml"
+    config_file = "clean_rl/N12S1/N12S1_IA_AR_PPO.yaml"
 
     args = parse_args_or_config(config_file)
     run_name = f"[{args.policy_name}] {args.env_name} - {int(time.time())}"
@@ -302,7 +302,7 @@ if __name__ == "__main__":
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         log_dict = {
             "update_info/learning_rate": optimizer.param_groups[0]["lr"],
-            "update_info/temperature": agent.temperature.item(),
+            "update_info/temperature": agent.temperature if isinstance(agent.temperature, float) else agent.temperature.item(),
             "update_info/entropy_loss": entropy_loss.item(),
             "update_info/approx_abs_kl": approx_kl.abs().item(),
             "update_info/clipfrac": np.mean(clipfracs),
