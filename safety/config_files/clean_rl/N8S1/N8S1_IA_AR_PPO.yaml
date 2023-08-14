@@ -30,8 +30,8 @@ max_grad_norm: 0.5
 target_kl: ~
 alpha: 0.1
 nu: 0.0
-temperature: 0.5
-learn_temperature: true
+temperature: 0.1
+learn_temperature: false
 
 reward_scale: .001
 obs_scale: 50
