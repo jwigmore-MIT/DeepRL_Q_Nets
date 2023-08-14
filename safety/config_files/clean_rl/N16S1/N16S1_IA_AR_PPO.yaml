@@ -1,17 +1,17 @@
 
-exp_name: "N2S2_CleanRL"
+exp_name: "N16S1_CleanRL"
 seed: 5031997
 torch_deterministic: true
 cuda: false
 track: true
-wandb_project_name: "N8S1"
+wandb_project_name: "N16S1"
 capture_video: false
 policy_name: "IA-ARPPO"
 save_models: true
 notes: For Clean RL based standard PPO implementation (discounted rewards)
 
 
-env_json_path: "/JSON/Environment/ServerAllocation/N8/N8S1.json"
+env_json_path: "/JSON/Environment/ServerAllocation/N16/N16S1.json"
 total_timesteps: 5000000
 learning_rate: 1.0e-4
 num_envs: 1
@@ -30,8 +30,7 @@ max_grad_norm: 0.5
 target_kl: ~
 alpha: 0.1
 nu: 0.0
-temperature: 0.5
-learn_temperature: true
+temperature: 0.3
 
 reward_scale: .001
 obs_scale: 50

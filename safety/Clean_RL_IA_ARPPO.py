@@ -42,9 +42,13 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, envs, temperature=1.0):
+    def __init__(self, envs, temperature=1.0, learn_temperature=False):
         super().__init__()
-        self.temperature = temperature
+        if learn_temperature:
+            self.temperature = nn.Parameter(torch.ones(1)*temperature)
+        else:
+            self.temperature = temperature
+
         self.critic = nn.Sequential(
             layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
             nn.Tanh(),
@@ -110,7 +114,7 @@ if __name__ == "__main__":
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
     if hasattr(args, 'temperature'):
-        agent = Agent(envs, temperature = args.temperature).to(device)
+        agent = Agent(envs, temperature = args.temperature, learn_temperature=args.learn_temperature).to(device)
     else:
         agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
@@ -292,6 +296,7 @@ if __name__ == "__main__":
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         log_dict = {
             "update_info/learning_rate": optimizer.param_groups[0]["lr"],
+            "update_info/temperature": agent.temperature.item(),
             "update_info/entropy_loss": entropy_loss.item(),
             "update_info/approx_abs_kl": approx_kl.abs().item(),
             "update_info/clipfrac": np.mean(clipfracs),
