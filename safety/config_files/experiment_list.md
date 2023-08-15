@@ -18,3 +18,9 @@ IA-AR_PPO on 8 Node with learned temperature
 
 ## Created 8.14 12:29pm (Ran ~12:30pm)
 8 Node symmetric with value bias negation and learned temperature
+
+## Created 8.15 8:18am (Ran 8:20am)
+12 Node symmetric, best parameters, with 4x128 hidden layer and 4x256 hidden layer
+
+## Created 8.15 8:19am 
+12 Node symmetric, best parameters, with 3x256 hidden layer

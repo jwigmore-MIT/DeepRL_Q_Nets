@@ -8,7 +8,7 @@
     "classes": {
       "1": {
         "source": 1,
-        "destination": 6,
+        "destination": 10,
         "arrival": 1,
         "probability": 1
       }
@@ -49,15 +49,15 @@
       },
       "(2,10)": {
           "capacity": 1,
-          "probability": 0.4
+          "probability": 0.3
       },
       "(3,10)": {
           "capacity": 1,
-          "probability": 0.3
+          "probability": 0.1
       },
       "(4,10)": {
           "capacity": 1,
-          "probability": 0.2
+          "probability": 0.1
       },
       "(5,10)": {
           "capacity": 1,
@@ -65,19 +65,19 @@
       },
       "(6,10)": {
           "capacity": 1,
-          "probability": 0.15
+          "probability": 0.1
       },
       "(7,10)": {
           "capacity": 1,
-          "probability": 0.15
+          "probability": 0.1
       },
       "(8,10)": {
           "capacity": 1,
-          "probability": 0.025
+          "probability": 0.1
       },
       "(9,10)": {
           "capacity": 1,
-          "probability": 0.3
+          "probability": 0.11
       }
     }
   }

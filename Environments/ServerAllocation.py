@@ -164,6 +164,12 @@ class ServerAllocation(gym.Env):
             rv = bern_rv(num = l_info['capacity'], prob= l_info['probability'])
             caps[link] = rv
 
+            # generate unreliabilities
+        self.unrel = []
+        for link in self.links:
+            if link[1] == self.destination:
+                self.unrel.append(1-caps[link].prob)
+
 
         if (0,0) in caps.keys():
             del caps[(0,0)]

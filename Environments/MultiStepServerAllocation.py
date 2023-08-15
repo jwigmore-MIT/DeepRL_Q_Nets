@@ -173,6 +173,11 @@ class MultiStepServerAllocation(gym.Env):
 
         if (0,0) in caps.keys():
             del caps[(0,0)]
+
+        #generate unreliabilities
+        self.unrel = []
+        for link in self.links:
+            self.unrel.append(1-caps[link].prob)
         return caps
 
     def _extract_classes(self, class_dict):

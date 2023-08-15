@@ -7,7 +7,7 @@ import torch
 from tqdm import tqdm
 
 run_type = "JSQ"
-config_file = "clean_rl/N4A1/N4A1_IA_AR_PPO.yaml"
+config_file = "clean_rl/N12S1/N12S1_IA_AR_PPO.yaml"
 args = clean_rl_ppo_parse_config(config_file)
 env = generate_clean_rl_env(args, normalize = False)()
 
@@ -33,9 +33,12 @@ wandb_log_interval = 100
 backlogs = np.zeros(test_length)
 pbar = tqdm(range(int(test_length)))
 for t in pbar:
-    #action = env.action_space.sample() # JRQ
-
-    action = np.argmin(list(env.buffers.values())[1:-1]) # JSQ
+    if run_type == "JRQ":
+        action = env.action_space.sample() # JRQ
+    elif run_type == "JSQ":
+        action = np.argmin(list(env.buffers.values())[1:-1]) # JSQ
+    elif run_type == "JWQ":
+        action = np.argmin(np.array(list(env.buffers.values()))[1:-1]*(env.unrel)) # JWQ
 
     next_obs, reward, terminated, truncated, info = env.step(action, debug=False)
     backlogs[t] = info["backlog"]
