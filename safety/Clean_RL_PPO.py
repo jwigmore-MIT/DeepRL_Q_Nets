@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
-from Environments.ServerAllocation import generate_clean_rl_env
+from Environments.ServerAssignment import generate_clean_rl_env
 from safety.utils import clean_rl_ppo_parse_config
 
 from tqdm import tqdm

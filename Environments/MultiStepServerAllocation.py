@@ -15,10 +15,10 @@ class bern_rv:
         else:
             return int(np.random.choice([0, self.num], 1, p=[1 - self.prob, self.prob]))
 
-class MultiStepServerAllocation(gym.Env):
+class MultiStepServerAssignment(gym.Env):
 
     def __init__(self, net_para):
-        super(MultiStepServerAllocation, self).__init__()
+        super(MultiStepServerAssignment, self).__init__()
 
         self.nodes = eval(net_para['nodes'])
         self.destination = max(self.nodes)
@@ -206,7 +206,7 @@ def generate_clean_rl_MSSA_env(config):
     def thunk():
         env_para = parse_env_json(config.root_dir + config.env_json_path, config)
         env_para["seed"] = config.seed
-        env = MultiStepServerAllocation(env_para)
+        env = MultiStepServerAssignment(env_para)
         #env = gym.wrappers.TransformReward(env, lambda x: x*config.reward_scale)
         #env = gym.wrappers.TransformObservation(env, lambda x: x*config.obs_scale)
         return env

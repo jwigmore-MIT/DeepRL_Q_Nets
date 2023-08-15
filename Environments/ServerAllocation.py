@@ -14,10 +14,10 @@ class bern_rv:
             return self.num
         else:
             return int(np.random.choice([0, self.num], 1, p=[1 - self.prob, self.prob]))
-class ServerAllocation(gym.Env):
+class ServerAssignment(gym.Env):
 
     def __init__(self, net_para):
-        super(ServerAllocation, self).__init__()
+        super(ServerAssignment, self).__init__()
 
         self.nodes = eval(net_para['nodes'])
         self.destination = max(self.nodes)
@@ -192,7 +192,7 @@ def generate_clean_rl_env(config, normalize = True):
     def thunk():
         env_para = parse_env_json(config.root_dir + config.env_json_path, config)
         env_para["seed"] = config.seed
-        env = ServerAllocation(env_para)
+        env = ServerAssignment(env_para)
         if normalize:
             # check to make sure obs_scale is greater than 1
             if config.obs_scale < 1:

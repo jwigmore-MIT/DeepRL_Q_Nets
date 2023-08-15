@@ -11,7 +11,7 @@ save_models: true
 notes: For Clean RL based standard PPO implementation (discounted rewards)
 
 
-env_json_path: "/JSON/Environment/ServerAllocation/N8/N8S1.json"
+env_json_path: "/JSON/Environment/ServerAssignment/N8/N8S1.json"
 total_timesteps: 1.0e+7
 learning_rate: 1.0e-4
 num_envs: 1

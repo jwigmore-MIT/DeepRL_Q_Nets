@@ -76,7 +76,7 @@ agent:
 
 
 env:
-    env_json_path: "/JSON/Environment/ServerAllocation/N4.json"
+    env_json_path: "/JSON/Environment/ServerAssignment/N4.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false

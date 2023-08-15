@@ -79,7 +79,7 @@ agent:
 
 
 env:
-    env_json_path: "/JSON/Environment/ServerAllocation/N2S2.json"
+    env_json_path: "/JSON/Environment/ServerAssignment/N2S2.json"
     wrappers:
       normalize_obs: false
       normalize_reward: false

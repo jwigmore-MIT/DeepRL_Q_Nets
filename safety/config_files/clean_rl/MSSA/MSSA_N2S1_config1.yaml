@@ -10,7 +10,7 @@ policy_name: "PPO"
 save_models: true
 
 
-env_json_path: "/JSON/Environment/MultiStepServerAllocation/MSSA_N2S1.json"
+env_json_path: "/JSON/Environment/MultiStepServerAssignment/MSSA_N2S1.json"
 total_timesteps: 500000
 learning_rate: 2.5e-4
 num_envs: 1

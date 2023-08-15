@@ -25,7 +25,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 from tqdm import tqdm
-from Environments.ServerAllocation import generate_clean_rl_env
+from Environments.ServerAssignment import generate_clean_rl_env
 from safety.utils import clean_rl_ppo_parse_config
 from safety.clean_rl_utils import observation_checker
 

@@ -19,7 +19,7 @@ tuner = Tuner(
         "nu": trial.suggest_categorical("nu", [0.0, -0.1, -0.3, -1.0]),
         # Not Swept
         "exp-name": "N4S3-sweep",
-        "env-json-path": "/JSON/Environment/ServerAllocation/N4/N4S3.json",
+        "env-json-path": "/JSON/Environment/ServerAssignment/N4/N4S3.json",
         "track": True,
         "wandb-project-name": "N4S3-sweep",
 

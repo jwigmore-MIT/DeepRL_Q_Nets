@@ -1,4 +1,4 @@
-from Environments.ServerAllocation import ServerAllocation, generate_clean_rl_env, generate_clean_rl_MSSA_env
+from Environments.ServerAssignment import ServerAssignment, generate_clean_rl_env, generate_clean_rl_MSSA_env
 from safety.utils import clean_rl_ppo_parse_config
 import numpy as np
 
