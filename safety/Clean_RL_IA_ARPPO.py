@@ -42,30 +42,44 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, envs, temperature=1.0, learn_temperature=False, hidden_size=64, hidden_depth=2):
+    def __init__(self, envs, temperature=1.0, learn_temperature=False, hidden_size=64, hidden_depth=2, actor_hidden_dims = None, critic_hidden_dims = None):
         super().__init__()
         if learn_temperature:
             self.temperature = nn.Parameter(torch.ones(1)*temperature)
         else:
             self.temperature = temperature
 
+
         # Critic
+        if critic_hidden_dims is None:
+            critic_hidden_depth = hidden_depth
+            critic_hidden_size = hidden_size
+        else:
+            critic_hidden_depth = critic_hidden_dims[0]
+            critic_hidden_size = critic_hidden_dims[1]
+
         in_dim = np.array(envs.single_observation_space.shape).prod()
         critic_layers = []
-        for i in range(hidden_depth):
-            critic_layers.append(layer_init(nn.Linear(in_dim, hidden_size)))
+        for i in range(critic_hidden_depth):
+            critic_layers.append(layer_init(nn.Linear(in_dim, critic_hidden_size)))
             critic_layers.append(nn.Tanh())
-            in_dim = hidden_size
+            in_dim = critic_hidden_size
         critic_layers.append(layer_init(nn.Linear(in_dim, 1), std=1.0))
         self.critic = nn.Sequential(*critic_layers)
        # Actor
+        if actor_hidden_dims is None:
+            actor_hidden_depth = hidden_depth
+            actor_hidden_size = hidden_size
+        else:
+            actor_hidden_depth = actor_hidden_dims[0]
+            actor_hidden_size = actor_hidden_dims[1]
         in_dim = np.array(envs.single_observation_space.shape).prod()
         out_dim = envs.single_action_space.n
         actor_layers = []
-        for i in range(hidden_depth):
-            actor_layers.append(layer_init(nn.Linear(in_dim, hidden_size)))
+        for i in range(actor_hidden_depth):
+            actor_layers.append(layer_init(nn.Linear(in_dim, actor_hidden_size)))
             actor_layers.append(nn.Tanh())
-            in_dim = hidden_size
+            in_dim = actor_hidden_size
         actor_layers.append(layer_init(nn.Linear(in_dim, out_dim), std=0.01))
         self.actor = nn.Sequential(*actor_layers)
 
@@ -122,19 +136,34 @@ if __name__ == "__main__":
     envs = gym.vector.SyncVectorEnv(
         [generate_clean_rl_env(args) for i in range(args.num_envs)]
     )
-    if hasattr(args, 'hidden_size'):
+    if hasattr(args, "critic_hidden_dims") and hasattr(args, "actor_hidden_dims") \
+            and args.critic_hidden_dims is not None and args.actor_hidden_dims is not None:
+        critic_hidden_dims = args.critic_hidden_dims
+        actor_hidden_dims = args.actor_hidden_dims
+        hidden_size = None
+        hidden_depth = None
+    elif hasattr(args, 'hidden_size'):
         hidden_size = args.hidden_size
         hidden_depth = args.hidden_depth
+        critic_hidden_dims = None
+        actor_hidden_dims = None
     else:
         hidden_size = 64
         hidden_depth = 2
+        critic_hidden_dims = None
+        actor_hidden_dims = None
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
     if hasattr(args, 'temperature'):
+        temperature = args.temperature
         learn_temperature = args.learn_temperature if hasattr(args, 'learn_temperature') else False
-        agent = Agent(envs, temperature = args.temperature, learn_temperature=learn_temperature,
-                      hidden_size=hidden_size, hidden_depth = hidden_depth).to(device)
     else:
-        agent = Agent(envs, hidden_size=hidden_size, hidden_depth = hidden_depth).to(device)
+        temperature = 1.0
+        learn_temperature = False
+
+    agent = Agent(envs, temperature = args.temperature, learn_temperature=learn_temperature,
+                  hidden_size=hidden_size, hidden_depth = hidden_depth,
+                  actor_hidden_dims=actor_hidden_dims, critic_hidden_dims= critic_hidden_dims).to(device)
+
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup

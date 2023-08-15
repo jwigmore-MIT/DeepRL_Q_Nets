@@ -23,4 +23,14 @@ IA-AR_PPO on 8 Node with learned temperature
 12 Node symmetric, best parameters, with 4x128 hidden layer and 4x256 hidden layer
 
 ## Created 8.15 8:19am 
-12 Node symmetric, best parameters, with 3x256 hidden layer
+12 Node symmetric, best parameters, with 3x256 hidden layer \
+_low priorty, first test actor_critic differences_
+## Created 8.15 9:04am
+Different sized actor and critic networks on 12 node symmetric system
+
+## Created 8.15 8:20am
+Lower temperature initialization with larger networks\
+e.g. \
+temp = 0.1, 0.5\
+     hidden_dims = [3,128]
+
