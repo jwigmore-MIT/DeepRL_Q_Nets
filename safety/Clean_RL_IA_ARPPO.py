@@ -28,10 +28,10 @@ from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
 # my imports
-from Environments.ServerAssignment import generate_clean_rl_env
+
 from safety.utils import clean_rl_ppo_parse_config
 from tqdm import tqdm
-from safety.clean_rl_utils import observation_checker, parse_args_or_config
+from safety.clean_rl_utils import observation_checker, parse_args_or_config, generate_clean_rl_env
 
 
 
@@ -42,12 +42,14 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, envs, temperature=1.0, learn_temperature=False, hidden_size=64, hidden_depth=2, actor_hidden_dims = None, critic_hidden_dims = None):
+    def __init__(self, envs, temperature=1.0, learn_temperature=False, hidden_size=64, hidden_depth=2, actor_hidden_dims = None, critic_hidden_dims = None, mask_value = -1e8):
         super().__init__()
+        self.mask_value = mask_value
         if learn_temperature:
             self.temperature = nn.Parameter(torch.ones(1)*temperature)
         else:
             self.temperature = temperature
+
 
 
         # Critic
@@ -87,9 +89,16 @@ class Agent(nn.Module):
     def get_value(self, x):
         return self.critic(x)
 
-    def get_action_and_value(self, x, action=None):
+    def get_action_and_value(self, x, action=None, mask = None):
 
         logits = self.actor(x)/self.temperature
+        if mask is not None:
+            # convert mask to Tensor and match shape of logits
+            if isinstance(mask, torch.Tensor):
+                mask = mask.reshape(logits.shape).bool()
+            else:
+                mask = torch.Tensor(mask).to(logits.device).reshape(logits.shape).bool()
+            logits[mask] = self.mask_value
         probs = Categorical(logits=logits)
         if action is None:
             action = probs.sample()
@@ -98,7 +107,7 @@ class Agent(nn.Module):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl/N12S1/N12S1_IA_AR_PPO.yaml"
+    config_file = "clean_rl/ServerAllocation/M2/M2A1_IA_AR_PPO.yaml"
 
 
     args = parse_args_or_config(config_file)
@@ -136,6 +145,9 @@ if __name__ == "__main__":
     envs = gym.vector.SyncVectorEnv(
         [generate_clean_rl_env(args) for i in range(args.num_envs)]
     )
+    # whether or not to mask the action space (only works for ServerAllocation)
+    apply_mask = args.apply_mask if hasattr(args, 'apply_mask') else False
+
     if hasattr(args, "critic_hidden_dims") and hasattr(args, "actor_hidden_dims") \
             and args.critic_hidden_dims is not None and args.actor_hidden_dims is not None:
         critic_hidden_dims = args.critic_hidden_dims
@@ -169,6 +181,7 @@ if __name__ == "__main__":
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
     actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
+    masks = torch.zeros((args.num_steps, args.num_envs) + (envs.action_space.nvec[0],)).to(device)
     interventions = torch.zeros((args.num_steps, args.num_envs)).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -204,12 +217,10 @@ if __name__ == "__main__":
             obs[step] = next_obs
             dones[step] = next_done
 
-            if envs.get_attr("get_backlog")[0] > args.int_thresh: #minus one to account for the source packet
+            if envs.call("get_backlog")[0] > args.int_thresh: #minus one to account for the source packet
                 reward_penalty = - args.intervention_penalty
-                buffers = envs.get_attr("get_obs")[0][1:-1]
-                np_action = np.argmin(buffers)
-                action = torch.Tensor([np_action]).to(device)
-                #action = torch.Tensor(np.argmin(buffers)).to(device)
+                np_action = envs.call("get_stable_action", args.stable_policy)[0]
+                action = torch.Tensor([np_action]).to(device).int()
                 with torch.no_grad():
                     _, log_prob, _, value = agent.get_action_and_value(next_obs, action)
                     values[step] = value.flatten()
@@ -217,10 +228,15 @@ if __name__ == "__main__":
             else:
                 reward_penalty = 0
                 with torch.no_grad():
-                    action, logprob, _, value = agent.get_action_and_value(next_obs)
+                    if apply_mask:
+                        mask = envs.call("get_mask")[0]
+                    else:
+                        mask = None
+                    action, logprob, _, value = agent.get_action_and_value(next_obs, mask = mask)
                     values[step] = value.flatten()
                     interventions[step] = torch.Tensor([0]).to(device)
             actions[step] = action
+            if apply_mask: masks[step] = torch.Tensor(mask).to(device)
             logprobs[step] = logprob
 
             # TRY NOT TO MODIFY: execute the game and log data.
@@ -270,6 +286,7 @@ if __name__ == "__main__":
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
         b_logprobs = logprobs.reshape(-1)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
+        b_masks = masks.reshape((-1,) + (envs.action_space.nvec[0],))
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
@@ -286,7 +303,7 @@ if __name__ == "__main__":
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
                 mb_interventions = b_inter[mb_inds]
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
+                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds], b_masks[mb_inds])
 
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()

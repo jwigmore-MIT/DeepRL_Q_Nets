@@ -1,26 +1,27 @@
 
-exp_name: "N12S1_CleanRL"
-seed: 5031997
+exp_name: "M2A1_CleanRL"
+env_type: "ServerAllocation"
+seed: 5031998
 torch_deterministic: true
 cuda: false
 track: true
-wandb_project_name: "N12S1"
+wandb_project_name: "M2A1"
 capture_video: false
 policy_name: "IA-ARPPO"
 save_models: true
 notes: For Clean RL based standard PPO implementation (discounted rewards)
 
 
-env_json_path: "/JSON/Environment/ServerAssignment/N12/N12S1.json"
+env_json_path: "/JSON/Environment/ServerAllocation/M2A1.json"
 total_timesteps: 3.0e+7
 learning_rate: 1.0e-4
 num_envs: 1
-num_steps: 512
+num_steps: 128
 anneal_lr: false
 gamma: 1.0
 gae_lambda: 0.95
-num_minibatches: 4
-update_epochs: 10
+num_minibatches: 2
+update_epochs: 4
 norm_adv: true
 clip_coef: 0.2
 clip_vloss: false
@@ -37,13 +38,16 @@ intervention_penalty: 0.00
 hidden_size: ~
 hidden_depth: ~
 
-critic_hidden_dims: [3, 64]
-actor_hidden_dims: [3, 64]
+critic_hidden_dims: [2, 64]
+actor_hidden_dims: [2, 64]
 
 reward_scale: .001
 obs_scale: 50
 
 int_thresh: 25
+
+apply_mask: true
+stable_policy: LQ
 
 window_size: 10000
 

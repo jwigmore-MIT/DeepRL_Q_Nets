@@ -7,6 +7,9 @@ import numpy as np
 from munch import Munch
 import yaml
 from datetime import datetime
+import gymnasium as gym
+from Environments.ServerAssignment import ServerAssignment
+from Environments.ServerAllocation import ServerAllocation
 
 def observation_checker(obs: torch.Tensor):
     """
@@ -144,3 +147,37 @@ def clean_rl_ppo_parse_config(config_file_name: str, run_type = "TRAIN"):
         os.makedirs(args.save_dir, exist_ok=True)
 
     return args
+
+
+def generate_clean_rl_env(config, env_type = "ServerAssigment",normalize = True):
+    config = config
+    normalize = normalize
+    env_type = config.env_type if hasattr(config, "env_type") else env_type
+    def thunk():
+        env_para = parse_env_json(config.root_dir + config.env_json_path, config)
+        env_para["seed"] = config.seed
+        if env_type == "ServerAssigment":
+            env = ServerAssignment(env_para)
+        elif env_type == "ServerAllocation":
+            env = ServerAllocation(env_para)
+        if normalize:
+            # check to make sure obs_scale is greater than 1
+            if config.obs_scale < 1:
+                raise ValueError("config.obs_scale must be greater than 1")
+            env = gym.wrappers.TransformReward(env, lambda x: x*config.reward_scale)
+            env = gym.wrappers.TransformObservation(env, lambda x: 2*x/config.obs_scale-1)
+        return env
+    return thunk
+
+def parse_env_json(json_path, config_args = None):
+    import json
+    para = json.load(open(json_path))
+    env_para = para["problem_instance"]
+    if config_args is not None:
+        if hasattr(config_args,'env'):
+            for key, value in env_para.items():
+                setattr(config_args.env, f"{key}", value)
+        else:
+            for key, value in env_para.items():
+                setattr(config_args, f"env.{key}", value)
+    return env_para

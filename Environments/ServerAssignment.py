@@ -14,11 +14,10 @@ class bern_rv:
             return self.num
         else:
             return int(np.random.choice([0, self.num], 1, p=[1 - self.prob, self.prob]))
-
-class MultiStepServerAssignment(gym.Env):
+class ServerAssignment(gym.Env):
 
     def __init__(self, net_para):
-        super(MultiStepServerAssignment, self).__init__()
+        super(ServerAssignment, self).__init__()
 
         self.nodes = eval(net_para['nodes'])
         self.destination = max(self.nodes)
@@ -33,16 +32,16 @@ class MultiStepServerAssignment(gym.Env):
     def step(self, action, debug = False):
         # the action is an integer indicating the server to send the arrived packet too
         info = {}
-        interarrival_time = 0
 
         # Step 0: Convert action to the buffer number and check if it is valid
         if debug: init_buffer = deepcopy(self.buffers)
         server_action = action + 2
         if server_action < 2 or server_action > self.n_servers+1:
             raise ValueError(f"Invalid action {action} for {self.n_servers} servers")
-        # Step 2: initialize capacities and delivered
-        capacities = np.zeros(len(self.links))
-        delivered = np.zeros(len(self.nodes))
+        # Step 2: Simulate the server operation
+        capacities = self._sim_capacities()
+        delivered = self._serve_step()
+        if debug: post_serve_buffer = deepcopy(self.buffers)
         # Step 1: Send the packet to the appropriate server
 
         if self.buffers[1] > 0:
@@ -57,62 +56,57 @@ class MultiStepServerAssignment(gym.Env):
 
 
         # Step 3: Get the corresponding reward
-
+        reward = self._get_reward()
 
         # Step 4: Simulate New Arrivals
-        n_arrivals = 0
-        interarrival_time = 0
-        reward = 0
-        while n_arrivals == 0:
-            interarrival_time += 1
-            capacities += self._sim_capacities()
-            delivered += self._serve_step()
-            reward += self._get_reward()
-            n_arrivals = self._sim_arrivals()
+        n_arrivals = self._sim_arrivals()
+        # n_arrivals = 0
+        # interarrival_time = 0
+        # while n_arrivals == 0:
+        #     interarrival_time += 1
+        #     n_arrivals = self._sim_arrivals()
+        #     if n_arrivals < 1:
+        #         delivered += self._serve_step()
 
 
-
-
-        average_capacity = capacities/interarrival_time
         if debug: post_arrival_buffer = deepcopy(self.buffers)
 
         # Step 5: Get the new state
-        next_state = self._get_obs()
-        backlog = self._get_backlog()
+        next_state = self.get_obs()
+        backlog = self.get_backlog()
 
         # Step 6: Fill out the info dict
-        info = {"ignore_action": ignore_action, "average_capacities": average_capacity, "delivered": delivered,
-                "backlog": backlog, "interarrival_time": interarrival_time,"n_arrivals": n_arrivals, "env_reward": reward}
+        info = {"ignore_action": ignore_action, "capacities": capacities, "delivered": delivered,
+                "backlog": backlog, "n_arrivals": n_arrivals, "env_reward": reward}
         terminated = False
         truncated = False
 
-        if debug: self._debug_printing(init_buffer, ignore_action, action, server_action,
-                        post_action_buffer, interarrival_time,
-                        post_arrival_buffer, delivered, average_capacity, n_arrivals, reward)
+        if debug: self._debug_printing(init_buffer, capacities, delivered, post_serve_buffer,
+                                       ignore_action, action, server_action, post_action_buffer,
+                                       post_arrival_buffer, n_arrivals, reward)
 
         return next_state, reward, terminated, truncated, info
 
-    def reset(self, seed = None):
+    def reset(self, seed = None, options = None):
         super().reset(seed = seed)
         self.buffers = {node: 0 for node in self.nodes}
-        state = self._get_obs()
-        info = {"reset": True}
-        return state, info
+        state = self.get_obs()
+        return state, {}
 
-    def _debug_printing(self, init_buffer, ignore_action, action, server_action,
-                        post_action_buffer, interarrival_time,
-                        post_arrival_buffer, delivered, average_capacity, n_arrivals, reward):
+    def _debug_printing(self, init_buffer, capacities, delivered, post_serve_buffer,
+                           ignore_action, action, server_action, post_action_buffer,
+                           post_arrival_buffer, n_arrivals, reward):
         print("="*20)
         print(f"Initial Buffer: {init_buffer}")
+        print(f"Capacities: {capacities}")
+        print(f"Delivered: {delivered}")
+        print(f"Post Serve Buffer: {post_serve_buffer}")
         print(f"Ignore Action: {ignore_action}")
         print(f"Action: {action} ; Server Action: {server_action}")
         print(f"Post Action Buffer: {post_action_buffer}")
-        print(f"Interarrival Time: {interarrival_time}")
-        print(f"Average Capacity: {average_capacity}")
-        print(f"Delivered: {delivered}")
+        print(f"Reward: {reward}")
         print("Arrivals: ", n_arrivals)
         print(f"Post Arrival Buffer: {post_arrival_buffer}")
-        print(f"Reward: {reward}")
         print("="*20)
         print("\n")
 
@@ -122,11 +116,11 @@ class MultiStepServerAssignment(gym.Env):
 
         return np.array(list(self.Cap.values()))
     def _serve_step(self):
-        delivered = np.zeros(len(self.nodes))
+        delivered = 0
         for server in self.nodes[1:-1]:
             server_capacity = self.Cap[server,self.destination]
             # if the server has capacity, reduce the buffer by the server capacity
-            delivered[server] +=  min(self.buffers[server], server_capacity)
+            delivered +=  min(self.buffers[server], server_capacity)
             self.buffers[server] = max(0, self.buffers[server] - server_capacity)
         return delivered
 
@@ -137,11 +131,17 @@ class MultiStepServerAssignment(gym.Env):
         else:
             raise NotImplementedError
 
-    def _get_backlog(self):
+    def get_backlog(self):
         return np.sum([self.buffers[node] for node in self.nodes[1:-1]])
 
-    def _get_obs(self):
+    def get_obs(self):
         return np.array([self.buffers[node] for node in self.nodes])
+
+    def get_stable_action(self, type = "JSQ"):
+        if type == "JSQ":
+            return np.argmin(list(self.buffers.values())[1:-1])
+        else:
+            raise NotImplementedError
     def _sim_arrivals(self):
         n_arrivals = 0
         for cls_num, cls_info in self.classes.items():
@@ -170,14 +170,15 @@ class MultiStepServerAssignment(gym.Env):
             rv = bern_rv(num = l_info['capacity'], prob= l_info['probability'])
             caps[link] = rv
 
+            # generate unreliabilities
+        self.unrel = []
+        for link in self.links:
+            if link[1] == self.destination:
+                self.unrel.append(1-caps[link].prob)
+
 
         if (0,0) in caps.keys():
             del caps[(0,0)]
-
-        #generate unreliabilities
-        self.unrel = []
-        for link in self.links:
-            self.unrel.append(1-caps[link].prob)
         return caps
 
     def _extract_classes(self, class_dict):
@@ -189,25 +190,15 @@ class MultiStepServerAssignment(gym.Env):
             destinations[int(cls_num)] = cls_info['destination']
         return classes, destinations
 
-def parse_env_json(json_path, config_args = None):
-    import json
-    para = json.load(open(json_path))
-    env_para = para["problem_instance"]
-    if config_args is not None:
-        if hasattr(config_args,'env'):
-            for key, value in env_para.items():
-                setattr(config_args.env, f"{key}", value)
-        else:
-            for key, value in env_para.items():
-                setattr(config_args, f"env.{key}", value)
-    return env_para
-def generate_clean_rl_MSSA_env(config):
-    config = config
-    def thunk():
-        env_para = parse_env_json(config.root_dir + config.env_json_path, config)
-        env_para["seed"] = config.seed
-        env = MultiStepServerAssignment(env_para)
-        #env = gym.wrappers.TransformReward(env, lambda x: x*config.reward_scale)
-        #env = gym.wrappers.TransformObservation(env, lambda x: x*config.obs_scale)
-        return env
-    return thunk
+
+
+
+
+
+
+
+
+
+
+
+
