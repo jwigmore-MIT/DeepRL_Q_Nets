@@ -156,7 +156,7 @@ class ServerAllocation(gym.Env):
             action = np.random.choice(np.where(obs > 0)[0]) + 1
         elif type == "LCQ":
             cap = self.get_cap()
-            connected_obs = cap
+            connected_obs = cap*obs
             action = np.random.choice(np.where(connected_obs == connected_obs.max())[0]) + 1
         elif type == "MWQ":
             p_cap = 1 - self.unreliabilities

@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 run_types = ["Optimal","LQ", "SQ", "RQ", "LCQ", "MWQ"]
-run_types = ["LCQ", "MWQ"]#,"RQ"]
+run_types = ["LCQ"]#,"RQ"]
 for run_type in run_types:
     config_file = "clean_rl/ServerAllocation/M2/M2A1_IA_AR_PPO.yaml"
     args = clean_rl_ppo_parse_config(config_file)
@@ -65,8 +65,8 @@ for run_type in run_types:
             else:
                 window_averaged_backlog = np.mean(backlogs[:t])
             lta_backlogs = np.cumsum(backlogs[:t]) / np.arange(1, t + 1)
-            wandb.log({"rollout/lta_backlogs": lta_backlogs[-1],
-                       "rollout/window_averaged_backlog": window_averaged_backlog,
+            wandb.log({"rollout/time_averaged_backlog": lta_backlogs[-1],
+                       "rollout/window_average_backlog": window_averaged_backlog,
                        "global_step": t })
     wandb.finish()
 # compute running sum over backlogs

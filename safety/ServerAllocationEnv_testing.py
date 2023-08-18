@@ -14,7 +14,7 @@ random.seed(args.seed)
 np.random.seed(args.seed)
 env.reset(seed = args.seed)
 
-type = "MWQ" # Longest Queue (LQ), Random Queue (RQ), Longest Connected Queue (LCQ), Max Weighted Queue (MWQ)
+type = "LCQ" # Longest Queue (LQ), Random Queue (RQ), Longest Connected Queue (LCQ), Max Weighted Queue (MWQ)
 
 arrivals = 0
 cap = 0
