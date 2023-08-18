@@ -4,8 +4,8 @@ import random
 import numpy as np
 import torch
 from tqdm import tqdm
-run_types = ["LQ", "SQ", "RQ", "LCQ", "MWQ"]
-#run_types = ["LQ"]#,"RQ"]
+run_types = ["Optimal","LQ", "SQ", "RQ", "LCQ", "MWQ"]
+run_types = ["LCQ", "MWQ"]#,"RQ"]
 for run_type in run_types:
     config_file = "clean_rl/ServerAllocation/M2/M2A1_IA_AR_PPO.yaml"
     args = clean_rl_ppo_parse_config(config_file)

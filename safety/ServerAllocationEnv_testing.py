@@ -14,7 +14,7 @@ random.seed(args.seed)
 np.random.seed(args.seed)
 env.reset(seed = args.seed)
 
-type = "LQ" # Longest Queue (LQ), Random Queue (RQ), Longest Connected Queue (LCQ), Max Weighted Queue (MWQ)
+type = "MWQ" # Longest Queue (LQ), Random Queue (RQ), Longest Connected Queue (LCQ), Max Weighted Queue (MWQ)
 
 arrivals = 0
 cap = 0
@@ -29,16 +29,16 @@ policy = pickle.load(open("../DP/M2A1_policy_table.p", "rb"))
 
 for t in pbar:
     #action = env.action_space.sample() # JRQ
-    obs = env.get_obs()
-    clip_obs = np.clip(obs, 0, 10)
-    state_tup = tuple(clip_obs)
-
-    #action = policy[state_tup]
-    action = 2 if obs[1] > 0 else 1
-    # if env.get_obs().sum() == 0:
-    #     action = 0
-    # else:
-    #     action = env.get_stable_action(type = type)
+    # obs = env.get_obs()
+    # clip_obs = np.clip(obs, 0, 10)
+    # state_tup = tuple(clip_obs)
+    #
+    # #action = policy[state_tup]
+    # action = 2 if obs[1] > 0 else 1
+    if env.get_obs().sum() == 0:
+        action = 0
+    else:
+        action = env.get_stable_action(type = type)
 
         # if type == "LQ":
         #     action = np.argmax(env.get_obs()) +1 # LQ
@@ -68,7 +68,7 @@ for t in pbar:
     arrivals += step[4]['n_arrivals']
     delivered += step[4]['delivered']
     cap += np.array(step[4]['current_capacities'])
-    observations[t] = obs
+    observations[t] = env.get_obs()
     rewards+=step[1]
 
 average_reward = np.sum(rewards)/test_length
