@@ -1,11 +1,12 @@
 from functools import singledispatch
 import gymnasium as gym
 # from Environments.MultiClassMultiHop import MultiClassMultiHop
-from stable_baselines3.common.monitor import Monitor
+#from stable_baselines3.common.monitor import Monitor
 import numpy as np
 from dataclasses import dataclass
 from param_extractors import parse_env_json
 from collections import defaultdict
+Monitor = None # install stable baselines for SB3 functions below
 
 
 @dataclass

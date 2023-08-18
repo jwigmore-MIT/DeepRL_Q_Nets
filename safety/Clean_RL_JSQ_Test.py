@@ -1,4 +1,4 @@
-from Environments.ServerAssignment import generate_clean_rl_env
+from safety.clean_rl_utils import generate_clean_rl_env
 from safety.utils import clean_rl_ppo_parse_config
 import wandb
 import random
