@@ -4,11 +4,16 @@ import random
 import numpy as np
 import torch
 from tqdm import tqdm
-run_types = ["Optimal","LQ", "SQ", "RQ", "LCQ", "MWQ"]
-run_types = ["LCQ"]#,"RQ"]
+
+config_file = "clean_rl/ServerAllocation/M10/M10A1-O_IA_AR_PPO.yaml"
+args = clean_rl_ppo_parse_config(config_file)
+if args.obs_links:
+    run_types = ["LCQ", "RCQ", "LRCQ"]#,"RQ"]
+else:
+    run_types = ["LQ", "RQ", "MRQ"] # RQ
+
+
 for run_type in run_types:
-    config_file = "clean_rl/ServerAllocation/M2/M2A1_IA_AR_PPO.yaml"
-    args = clean_rl_ppo_parse_config(config_file)
     env = generate_clean_rl_env(args, env_type = "Allocation",normalize = False)()
 
     run_name = f"{args.env_name}__{run_type}"
@@ -28,7 +33,7 @@ for run_type in run_types:
     torch.manual_seed(args.seed)
 
 
-    test_length = int(2e6)
+    test_length = int(3e6)
     wandb_log_interval = 1000
     backlogs = np.zeros(test_length)
     pbar = tqdm(range(int(test_length)))

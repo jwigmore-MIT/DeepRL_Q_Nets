@@ -36,12 +36,17 @@ class ServerAllocation(gym.Env):
         # Spaces
         state_low = np.concatenate((np.zeros(self.n_queues), np.zeros(self.n_queues)))
         state_high = np.concatenate((1e3 * np.ones(self.n_queues), np.ones(self.n_queues)))
-        self.state_space = gym.spaces.Box(low=state_low, high=state_high, shape=(2 * self.n_queues,), dtype=int)
+        self.state_space = gym.spaces.Box(low=state_low, high=state_high, shape=(2 * self.n_queues,), dtype=np.float32)
         if self.obs_links:
             self.observation_space = self.state_space
         else:
             self.observation_space = gym.spaces.Box(low=0, high=1e3, shape=(self.n_queues,), dtype=np.float32)
         self.action_space = gym.spaces.Discrete(self.n_queues+1)
+        # Fixed Policies
+        if self.obs_links:
+            self.fixed_policies = ["LCQ", "RCQ", "LRCQ"] # "Longest Connected Queue", "Random Connected Queue", "Least Reliable Connected Queue"
+        else:
+            self.fixed_policies = ["LQ", "RQ", "MRQ"] # "Longest Queue", "Random Queue", "Most Reliable Queue"
 
 
     def step(self, action, debug = False):
@@ -107,9 +112,9 @@ class ServerAllocation(gym.Env):
         super().reset(seed = seed)
         np.random.seed(seed)
         self.buffers = {node: 0 for node in self.nodes if node != self.destination}
-        state = self.get_obs()
+        obs = self.get_obs()
         self._sim_capacities()
-        return state, {}
+        return obs, {}
 
     def _debug_printing(self, init_buffer, current_capacities, delivered,
                            ignore_action, action, post_action_buffer,
@@ -147,13 +152,11 @@ class ServerAllocation(gym.Env):
     def get_buffers(self):
         return np.array(list(self.buffers.values()))
 
-    def get_obs(self, buffers_only = None):
-        if buffers_only is None:
-            buffers_only = not self.obs_links
-        if buffers_only:
+    def get_obs(self):
+        if not self.obs_links:
             return np.array(self.get_buffers())
         else:
-            return np.concatenate([self.get_buffers(), self.Cap])
+            return np.concatenate([self.get_buffers(), self.get_cap()])
 
     def get_cap(self):
         return np.array(self.Cap)
@@ -162,7 +165,6 @@ class ServerAllocation(gym.Env):
         q_obs = self.get_buffers()
         if type == "LQ":
             action = np.random.choice(np.where(q_obs == q_obs.max())[0]) + 1  # LQ
-
         elif type == "SQ":
             q_obs[q_obs == 0] = 1000000
             action = np.random.choice(np.where(q_obs == q_obs.min())[0]) + 1
@@ -172,10 +174,31 @@ class ServerAllocation(gym.Env):
             cap = self.get_cap()
             connected_obs = cap * q_obs
             action = np.random.choice(np.where(connected_obs == connected_obs.max())[0]) + 1
-        elif type == "MWQ":
+        elif type == "MRQ": #Most Reliable Queue
             p_cap = 1 - self.unreliabilities
-            weighted_obs = p_cap * q_obs
-            action = np.random.choice(np.where(weighted_obs == weighted_obs.max())[0]) + 1
+            valid_obs = q_obs > 0
+            # choose the most reliable queue that is not empty
+            valid_p_cap = p_cap * valid_obs
+            if np.all(valid_obs == False):
+                action = 0
+            else:
+                action = np.random.choice(np.where(valid_p_cap == valid_p_cap.max())[0]) + 1
+        elif type == "RCQ": # Random Connected Queue
+            cap = self.get_cap()
+            connected_obs = cap * q_obs
+            if np.all(connected_obs == 0):
+                action = 0
+            else:
+                action = np.random.choice(np.where(connected_obs > 0)[0]) + 1
+        elif type == "LRCQ": # Least Reliable Connected Queue
+            p_cap = self.unreliabilities
+            cap = self.get_cap()
+            connected_obs = cap * q_obs
+            weighted_obs = p_cap * connected_obs
+            if np.all(weighted_obs == 0):
+                action = 0
+            else:
+                action = np.random.choice(np.where(weighted_obs == weighted_obs.max())[0]) + 1
         elif type == "Optimal":
             if not self.obs_links:
                 p_cap = 1 - self.unreliabilities
@@ -186,9 +209,11 @@ class ServerAllocation(gym.Env):
                 p_cap = 1 - self.unreliabilities
                 non_empty = q_obs > 0
                 action = np.argmax(p_cap * non_empty) + 1
-                raise NotImplementedError
 
-        return action.astype(int)
+
+        if not isinstance(action, int):
+            action = action.astype(int)
+        return action
 
 
     def get_mask(self):

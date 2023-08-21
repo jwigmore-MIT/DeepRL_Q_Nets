@@ -1,0 +1,112 @@
+{
+  "problem_instance": {
+    "name": "SA-Symmetric-2N",
+    "notes": "",
+    "nodes": "[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]",
+    "links": "[[1,11], [2,11], [3, 11], [4, 11], [5, 11], [6, 11], [7, 11], [8, 11], [9, 11], [10, 11]]",
+    "classes": {
+      "1": {
+        "source": 1,
+        "destination": 11,
+        "arrival": 1,
+        "probability": 0.05
+      },
+      "2": {
+          "source": 2,
+          "destination": 11,
+          "arrival": 1,
+          "probability": 0.01
+      },
+      "3": {
+          "source": 3,
+          "destination": 11,
+          "arrival": 1,
+          "probability": 0.2
+      },
+      "4": {
+          "source": 4,
+          "destination": 11,
+          "arrival": 1,
+          "probability": 0.4
+      },
+      "5": {
+          "source": 5,
+          "destination": 11,
+          "arrival": 1,
+          "probability": 0.05
+      },
+        "6": {
+            "source": 6,
+            "destination": 11,
+            "arrival": 1,
+            "probability": 0.01
+        },
+        "7": {
+            "source": 7,
+            "destination": 11,
+            "arrival": 1,
+            "probability": 0.02
+        },
+        "8": {
+            "source": 8,
+            "destination": 11,
+            "arrival": 1,
+            "probability": 0.01
+        },
+        "9": {
+            "source": 9,
+            "destination": 11,
+            "arrival": 1,
+            "probability": 0.015
+        },
+        "10": {
+            "source": 10,
+            "destination": 11,
+            "arrival": 1,
+            "probability": 0.01
+        }
+    },
+    "capacities": {
+      "(1,11)": {
+        "capacity": 1,
+        "probability": 0.9
+      },
+      "(2,11)": {
+        "capacity": 1,
+        "probability": 0.85
+      },
+        "(3,11)": {
+            "capacity": 1,
+            "probability": 0.95
+        },
+        "(4,11)": {
+            "capacity": 1,
+            "probability": 0.75
+        },
+        "(5,11)": {
+            "capacity": 1,
+            "probability": 0.9
+        },
+        "(6,11)": {
+            "capacity": 1,
+            "probability": 0.9
+        },
+        "(7,11)": {
+            "capacity": 1,
+            "probability": 0.85
+        },
+        "(8,11)": {
+            "capacity": 1,
+            "probability": 0.9
+        },
+        "(9,11)": {
+            "capacity": 1,
+            "probability": 0.9
+        },
+        "(10,11)": {
+            "capacity": 1,
+            "probability": 0.85
+        }
+    }
+  }
+}

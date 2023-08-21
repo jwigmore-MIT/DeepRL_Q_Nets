@@ -4,9 +4,10 @@ env_type: "ServerAllocation"
 obs_links: false
 seed: 5031998
 torch_deterministic: true
-cuda: false
+cuda: true
 track: true
-wandb_project_name: "M2A1"
+test: true
+wandb_project_name: "ServerAllocation_M2A1-U"
 capture_video: false
 policy_name: "IA-ARPPO"
 save_models: true
@@ -32,7 +33,7 @@ max_grad_norm: 0.5
 target_kl: ~
 alpha: 0.1
 nu: -0.1
-temperature: 1.0
+temperature: 0.1
 learn_temperature: true
 intervention_penalty: 0.00
 
@@ -51,6 +52,8 @@ apply_mask: true
 stable_policy: LQ
 
 window_size: 10000
+
+test_steps: 1.0e+5
 
 
 

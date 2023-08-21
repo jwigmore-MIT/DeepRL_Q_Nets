@@ -106,6 +106,16 @@ def parse_args_or_config(config_path = None):
 
     else:
         args = clean_rl_ppo_parse_config(config_path)
+
+    # Do checks
+    if args.nu > 0.0:
+       raise Exception("nu must be non-positive")
+    if not hasattr(args, "cuda"):
+        args.cuda = torch.cuda.is_available()
+    if not hasattr(args, "apply_mask"):
+        raise Exception("Must specify whether or not to apply mask")
+    if not hasattr(args, "obs_links"):
+        raise Exception("Must specify obs_links <bool> (ie whether or not link states are seen by agent")
     # fmt: on
     return args
 

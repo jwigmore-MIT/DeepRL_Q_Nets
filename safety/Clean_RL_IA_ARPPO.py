@@ -112,14 +112,13 @@ class Agent(nn.Module):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl/ServerAllocation/M2/M2A1_IA_AR_PPO.yaml"
+    config_file = "clean_rl/ServerAllocation/M10/M10A1-O_IA_AR_PPO.yaml"
 
 
     args = parse_args_or_config(config_file)
     args.device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     args.total_timesteps = int(args.total_timesteps)
-    if args.nu > 0:
-        raise NotImplementedError("nu > 0, nu should be negative!!!!")
+
     run_name = f"[{args.policy_name}] {args.env_name} - {int(time.time())}"
     if args.track:
         import wandb
@@ -150,8 +149,7 @@ if __name__ == "__main__":
     envs = gym.vector.SyncVectorEnv(
         [generate_clean_rl_env(args) for i in range(args.num_envs)]
     )
-    # whether or not to mask the action space (only works for ServerAllocation)
-    apply_mask = args.apply_mask if hasattr(args, 'apply_mask') else False
+
 
     if hasattr(args, "critic_hidden_dims") and hasattr(args, "actor_hidden_dims") \
             and args.critic_hidden_dims is not None and args.actor_hidden_dims is not None:
@@ -233,7 +231,7 @@ if __name__ == "__main__":
             else:
                 reward_penalty = 0
                 with torch.no_grad():
-                    if apply_mask:
+                    if args.apply_mask:
                         mask = envs.call("get_mask")[0]
                     else:
                         mask = None
@@ -241,7 +239,7 @@ if __name__ == "__main__":
                     values[step] = value.flatten()
                     interventions[step] = torch.Tensor([0]).to(device)
             actions[step] = action
-            if apply_mask: masks[step] = torch.Tensor(mask).to(device)
+            if args.apply_mask: masks[step] = torch.Tensor(mask).to(device)
             logprobs[step] = logprob
 
             # TRY NOT TO MODIFY: execute the game and log data.
@@ -364,93 +362,95 @@ if __name__ == "__main__":
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
-        log_dict = {
-            "update_info/learning_rate": optimizer.param_groups[0]["lr"],
-            "update_info/temperature": agent.temperature if isinstance(agent.temperature, float) else agent.temperature.item(),
-            "update_info/entropy_loss": entropy_loss.item(),
-            "update_info/approx_abs_kl": approx_kl.abs().item(),
-            "update_info/clipfrac": np.mean(clipfracs),
-            "update_info/loss": loss.item(),
-            "update_info/clipped_pg_loss": pg_loss.item(),
-            "update_info/abs_pg_loss": pg_loss.abs().item(),
-            "update_info/unclipped_pg_loss": pg_loss1.mean().item(),
-            "update_info/value_loss": v_loss.item(),
-            "update_info/avg_value": b_values.mean().item(),
-            "update_info/critic_error": error.mean(),
-            "update_info/advantages": advantages.mean().item(),
-            "update_info/explained_variance": explained_var,
-            "update_info/old_approx_kl": old_approx_kl.item(),
-            "update_info/mb_adv_mean": np.mean(mb_stats["mb_adv_mean"]),
-            "update_info/mb_adv_std": np.mean(mb_stats["mb_adv_std"]),
-            "ARPPO_info/eta": eta,
-            "ARPPO_info/beta": beta,
-            "ARPPO_info/bias_factor": bias_factor,
+        if args.track:
+            log_dict = {
+                "update_info/learning_rate": optimizer.param_groups[0]["lr"],
+                "update_info/temperature": agent.temperature if isinstance(agent.temperature, float) else agent.temperature.item(),
+                "update_info/entropy_loss": entropy_loss.item(),
+                "update_info/approx_abs_kl": approx_kl.abs().item(),
+                "update_info/clipfrac": np.mean(clipfracs),
+                "update_info/loss": loss.item(),
+                "update_info/clipped_pg_loss": pg_loss.item(),
+                "update_info/abs_pg_loss": pg_loss.abs().item(),
+                "update_info/unclipped_pg_loss": pg_loss1.mean().item(),
+                "update_info/value_loss": v_loss.item(),
+                "update_info/avg_value": b_values.mean().item(),
+                "update_info/critic_error": error.mean(),
+                "update_info/advantages": advantages.mean().item(),
+                "update_info/explained_variance": explained_var,
+                "update_info/old_approx_kl": old_approx_kl.item(),
+                "update_info/mb_adv_mean": np.mean(mb_stats["mb_adv_mean"]),
+                "update_info/mb_adv_std": np.mean(mb_stats["mb_adv_std"]),
+                "ARPPO_info/eta": eta,
+                "ARPPO_info/beta": beta,
+                "ARPPO_info/bias_factor": bias_factor,
 
-            "rollout/backlog": np.mean(backlogs[:global_step]),
-            "rollout/time_averaged_backlog": time_averaged_backlog,
-            "rollout/window_average_backlog": window_average_backlog,
-            "rollout/rewards": np.mean(rewards.cpu().numpy()),
-            "rollout/episode": update,
-            "rollout/intervention_rate": interventions.mean().item(),
-            "update_info/update": update,
-            "global_step": global_step,
+                "rollout/backlog": np.mean(backlogs[:global_step]),
+                "rollout/time_averaged_backlog": time_averaged_backlog,
+                "rollout/window_average_backlog": window_average_backlog,
+                "rollout/rewards": np.mean(rewards.cpu().numpy()),
+                "rollout/episode": update,
+                "rollout/intervention_rate": interventions.mean().item(),
+                "update_info/update": update,
+                "global_step": global_step,
 
-        }
-        wandb.log(log_dict)
+            }
+            wandb.log(log_dict)
 
     # Test the trained policy
-    args.test_steps = 100000
-    args.test_log_interval = 1000
-    test_obs = torch.zeros((args.test_steps,1) + envs.single_observation_space.shape).to(device)
-    test_actions = torch.zeros((args.test_steps,1) + envs.single_action_space.shape).to(device)
-    test_interventions = torch.zeros((args.test_steps)).to(device)
-    test_rewards = torch.zeros((args.test_steps)).to(device)
-    test_backlogs = np.zeros((args.test_steps))
-    total_backlogs = np.zeros((args.test_steps))
-    envs.reset()
-    agent.eval()
+    if args.test:
+        #args.test_steps = 100000
+        args.test_log_interval = 1000
+        test_obs = torch.zeros((args.test_steps,1) + envs.single_observation_space.shape).to(device)
+        test_actions = torch.zeros((args.test_steps,1) + envs.single_action_space.shape).to(device)
+        test_interventions = torch.zeros((args.test_steps)).to(device)
+        test_rewards = torch.zeros((args.test_steps)).to(device)
+        test_backlogs = np.zeros((args.test_steps))
+        total_backlogs = np.zeros((args.test_steps))
+        envs.reset()
+        agent.eval()
 
-    next_obs_array, next_info = envs.reset()
-    next_obs = torch.Tensor(next_obs_array).to(device)
+        next_obs_array, next_info = envs.reset()
+        next_obs = torch.Tensor(next_obs_array).to(device)
 
-    test_sum_backlogs = 0
-    pbar = tqdm(range(args.test_steps), ncols=80, desc="Test Episode")
-    for t in pbar:
-        observation_checker(next_obs)
-        test_obs[t] = next_obs
+        test_sum_backlogs = 0
+        pbar = tqdm(range(args.test_steps), ncols=80, desc="Test Episode")
+        for t in pbar:
+            observation_checker(next_obs)
+            test_obs[t] = next_obs
 
-        if envs.get_attr("get_backlog")[0] > args.int_thresh:  # minus one to account for the source packet
-            buffers = envs.get_attr("get_obs")[0][1:-1]
-            np_action = np.argmin(buffers)
-            action = torch.Tensor([np_action])
-            # action = torch.Tensor(np.argmin(buffers)).to(device)
-            with torch.no_grad():
-                _, log_prob, _, value = agent.get_action_and_value(next_obs, action)
-                test_interventions[t] = torch.Tensor([1]).to(device)
-        else:
-            # ALGO LOGIC: action logic
-            with torch.no_grad():
-                action, logprob, _, value = agent.get_action_and_value(next_obs)
-                test_interventions[t] = torch.Tensor([0]).to(device)
-        test_actions[t] = action
-
-        # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, reward, terminated, truncated, info = envs.step(action.cpu().numpy())
-        done = terminated | truncated
-        test_rewards[t] = torch.tensor(reward).to(device).view(-1)
-        next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
-        test_backlogs[t] = info['backlog'][0]
-        test_sum_backlogs += info['backlog'][0]
-        if t > 0 and t % args.test_log_interval == 0:
-            if t >= args.window_size:
-                window_averaged_backlog = np.mean(
-                    test_backlogs[t - args.window_size:t])
+            if envs.get_attr("get_backlog")[0] > args.int_thresh:  # minus one to account for the source packet
+                buffers = envs.get_attr("get_obs")[0][1:-1]
+                np_action = np.argmin(buffers)
+                action = torch.Tensor([np_action])
+                # action = torch.Tensor(np.argmin(buffers)).to(device)
+                with torch.no_grad():
+                    _, log_prob, _, value = agent.get_action_and_value(next_obs, action)
+                    test_interventions[t] = torch.Tensor([1]).to(device)
             else:
-                window_averaged_backlog = np.mean(test_backlogs[:t])
-            lta_backlogs = np.cumsum(test_backlogs[:t]) / np.arange(1, t + 1)
-            wandb.log({"test/lta_backlogs": lta_backlogs[-1],
-                       "test/window_averaged_backlog": window_averaged_backlog,
-                       "test_step": t})
+                # ALGO LOGIC: action logic
+                with torch.no_grad():
+                    action, logprob, _, value = agent.get_action_and_value(next_obs)
+                    test_interventions[t] = torch.Tensor([0]).to(device)
+            test_actions[t] = action
+
+            # TRY NOT TO MODIFY: execute the game and log data.
+            next_obs, reward, terminated, truncated, info = envs.step(action.cpu().numpy())
+            done = terminated | truncated
+            test_rewards[t] = torch.tensor(reward).to(device).view(-1)
+            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
+            test_backlogs[t] = info['backlog'][0]
+            test_sum_backlogs += info['backlog'][0]
+            if t > 0 and t % args.test_log_interval == 0:
+                if t >= args.window_size:
+                    window_averaged_backlog = np.mean(
+                        test_backlogs[t - args.window_size:t])
+                else:
+                    window_averaged_backlog = np.mean(test_backlogs[:t])
+                lta_backlogs = np.cumsum(test_backlogs[:t]) / np.arange(1, t + 1)
+                wandb.log({"test/lta_backlogs": lta_backlogs[-1],
+                           "test/window_averaged_backlog": window_averaged_backlog,
+                           "test_step": t})
 
 
 
