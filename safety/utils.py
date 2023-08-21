@@ -82,8 +82,17 @@ def clean_rl_ppo_parse_config(config_file_name: str, run_type = "TRAIN"):
 
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
+
+    # check for obs_links
+    if hasattr(args, "obs_links"):
+        if args.obs_links:
+            obs_link_str = "OL"
+        else:
+            obs_link_str = "UOL"
+    else:
+        obs_link_str = ""
     # Extract env name
-    args.env_name = args.env_json_path.split("/")[-1].split(".")[0]
+    args.env_name = args.env_json_path.split("/")[-1].split(".")[0] + "_" + obs_link_str
 
     # Create run name
     args.run_name = args.policy_name + "_" + args.env_name + "_"  + run_type + "_" + datetime.now().strftime("%Y%m%d-%H%M%S")

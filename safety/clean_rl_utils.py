@@ -156,7 +156,8 @@ def generate_clean_rl_env(config, env_type = "ServerAssigment",normalize = True)
     def thunk():
         env_para = parse_env_json(config.root_dir + config.env_json_path, config)
         env_para["seed"] = config.seed
-        if env_type == "ServerAssigment":
+        env_para["obs_links"] = config.obs_links if hasattr(config, "obs_links") else None
+        if env_type == "ServerAssignment":
             env = ServerAssignment(env_para)
         elif env_type == "ServerAllocation":
             env = ServerAllocation(env_para)

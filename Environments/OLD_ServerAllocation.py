@@ -26,24 +26,17 @@ class ServerAllocation(gym.Env):
         self.destination = max(self.nodes)
         self.n_queues = len(self.nodes) - 1
         self.buffers = {node: 0 for node in self.nodes if node != self.destination}
-        # Links
-        self.obs_links = net_para["obs_links"] # whether or not the link states are observable
-        self.links = [tuple(link) for link in eval(net_para['links'])]  # observable links <list> of <tup>
+        self.observation_space = gym.spaces.Box(low=0, high=1e6, shape=(self.n_queues,), dtype=np.float32)
+
+        # Links and capacity functions
+        self.links = [tuple(link) for link in eval(net_para['links'])]
         self.capacities_fcn = self._extract_capacities(net_para['capacities'])
-        self.Cap = self._sim_capacities()
-        # Arrivals/Classes
+        # Classes (really the arrival processes)
         self.classes, self.destinations = self._extract_classes(net_para['classes'])
-        # Spaces
-        state_low = np.concatenate((np.zeros(self.n_queues), np.zeros(self.n_queues)))
-        state_high = np.concatenate((1e3 * np.ones(self.n_queues), np.ones(self.n_queues)))
-        self.state_space = gym.spaces.Box(low=state_low, high=state_high, shape=(2 * self.n_queues,), dtype=int)
-        if self.obs_links:
-            self.observation_space = self.state_space
-        else:
-            self.observation_space = gym.spaces.Box(low=0, high=1e3, shape=(self.n_queues,), dtype=np.float32)
+
+
         self.action_space = gym.spaces.Discrete(self.n_queues+1)
-
-
+        self.Cap = self._sim_capacities()
     def step(self, action, debug = False):
         # the action is an integer indicating the server to send the arrived packet too
         info = {}
@@ -52,7 +45,7 @@ class ServerAllocation(gym.Env):
         if debug: init_buffer = deepcopy(self.buffers)
         current_capacities = deepcopy(self.Cap)
 
-        if action > self.n_queues:
+        if action < 0 or action > self.n_queues:
             raise ValueError(f"Invalid action {action} for {self.n_queues} queues")
 
         # Step 1: Apply the action
@@ -106,7 +99,7 @@ class ServerAllocation(gym.Env):
     def reset(self, seed = None, options = None):
         super().reset(seed = seed)
         np.random.seed(seed)
-        self.buffers = {node: 0 for node in self.nodes if node != self.destination}
+        self.buffers = {node: 0 for node in self.nodes}
         state = self.get_obs()
         self._sim_capacities()
         return state, {}
@@ -132,93 +125,65 @@ class ServerAllocation(gym.Env):
         self.Cap = [rv.sample() for rv in self.capacities_fcn]
         # return copy of the second half of Cap.keys as np.array
         return np.array(self.Cap)
-
+    def _serve_step(self):
+        delivered = 0
+        for server in self.nodes[1:-1]:
+            server_capacity = self.Cap[server,self.destination]
+            # if the server has capacity, reduce the buffer by the server capacity
+            delivered +=  min(self.buffers[server], server_capacity)
+            self.buffers[server] = max(0, self.buffers[server] - server_capacity)
+        return delivered
 
     def _get_reward(self, type = "congestion"):
 
         if type == "congestion":
-            return -self.get_backlog()
+            return -np.sum([self.buffers[node] for node in self.nodes])
         else:
             raise NotImplementedError
 
     def get_backlog(self):
-        return np.sum(self.get_buffers())
+        return np.sum([self.buffers[node] for node in self.nodes])
 
-    def get_buffers(self):
-        return np.array(list(self.buffers.values()))
-
-    def get_obs(self, buffers_only = None):
-        if buffers_only is None:
-            buffers_only = not self.obs_links
-        if buffers_only:
-            return np.array(self.get_buffers())
-        else:
-            return np.concatenate([self.get_buffers(), self.Cap])
+    def get_obs(self):
+        return np.array([self.buffers[node] for node in self.nodes[:-1]])
 
     def get_cap(self):
         return np.array(self.Cap)
 
     def get_stable_action(self, type = "LQ"):
-        q_obs = self.get_buffers()
+        obs = self.get_obs()
         if type == "LQ":
-            action = np.random.choice(np.where(q_obs == q_obs.max())[0]) + 1  # LQ
+            action = np.random.choice(np.where(obs == obs.max())[0]) + 1  # LQ
 
         elif type == "SQ":
-            q_obs[q_obs == 0] = 1000000
-            action = np.random.choice(np.where(q_obs == q_obs.min())[0]) + 1
+            obs[obs == 0] = 1000000
+            action = np.random.choice(np.where(obs == obs.min())[0]) + 1
         elif type == "RQ":
-            action = np.random.choice(np.where(q_obs > 0)[0]) + 1
+            action = np.random.choice(np.where(obs > 0)[0]) + 1
         elif type == "LCQ":
             cap = self.get_cap()
-            connected_obs = cap * q_obs
+            connected_obs = cap*obs
             action = np.random.choice(np.where(connected_obs == connected_obs.max())[0]) + 1
         elif type == "MWQ":
             p_cap = 1 - self.unreliabilities
-            weighted_obs = p_cap * q_obs
+            weighted_obs = p_cap * obs
             action = np.random.choice(np.where(weighted_obs == weighted_obs.max())[0]) + 1
         elif type == "Optimal":
-            if not self.obs_links:
-                p_cap = 1 - self.unreliabilities
-                non_empty = q_obs > 0
-                action  = np.argmax(p_cap*non_empty)+1
-            else:
-                # should select the connected link with the lowest success probability
-                p_cap = 1 - self.unreliabilities
-                non_empty = q_obs > 0
-                action = np.argmax(p_cap * non_empty) + 1
-                raise NotImplementedError
-
+            p_cap = 1 - self.unreliabilities
+            non_empty = obs > 0
+            action  = np.argmax(p_cap*non_empty)+1
         return action.astype(int)
 
 
     def get_mask(self):
-        """
-        Cases:
-        Based on buffers being empty
-            1) All buffers are empty -> mask all but action 0
-            2) There is at least one non-empty buffer -> mask action 0 and all empty buffers
-        Based on links being connected AND observed
-        1.) Mask the actions corresponding to non-connected links
-            - If already masked, leave masked, if not masked but not connected mask
-                mask[1:] = np.logical_or(mask[1:], 1-self.get_cap())
-        Returns: Boolean mask vector corresponding to actions 0 to n_queues
-        -------
-
-        """
         # returns a vector of length n_queues + 1
-        mask = np.bool_(np.zeros(self.n_queues+1)) # size of the action space
-        # masking based on buffers being empty
-        if self.get_backlog() == 0:
+        mask = np.bool_(np.zeros(self.n_queues+1))
+        if self.get_obs().sum() == 0:
             mask[1:] = True
-        else: # Case 2
-            mask[0] = True # mask action 0
-            mask[1:] = self.get_buffers() < 1 # mask all empty buffers
-        # masking based on connected links
-        if self.obs_links:
-            mask[1:] = np.logical_or(mask[1:], 1-self.get_cap())
+        else:
+            mask[0] = True
+            mask[1:] = self.get_obs() < 1
         return mask
-
-
     def _sim_arrivals(self):
         n_arrivals = 0
         for cls_num, cls_rv in enumerate(self.classes.items()):

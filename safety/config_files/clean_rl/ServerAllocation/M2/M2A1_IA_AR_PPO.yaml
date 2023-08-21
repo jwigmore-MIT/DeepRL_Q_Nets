@@ -1,6 +1,7 @@
 
 exp_name: "M2A1_CleanRL"
 env_type: "ServerAllocation"
+obs_links: false
 seed: 5031998
 torch_deterministic: true
 cuda: false
