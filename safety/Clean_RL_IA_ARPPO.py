@@ -28,7 +28,7 @@ from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
 # my imports
-from Environments.ServerAssignment import generate_clean_rl_env
+from Environments.ServerAllocation import generate_clean_rl_env
 from safety.utils import clean_rl_ppo_parse_config
 from tqdm import tqdm
 from safety.clean_rl_utils import observation_checker, parse_args_or_config

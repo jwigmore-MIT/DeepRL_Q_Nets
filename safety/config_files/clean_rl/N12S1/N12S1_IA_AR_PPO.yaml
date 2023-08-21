@@ -11,8 +11,8 @@ save_models: true
 notes: For Clean RL based standard PPO implementation (discounted rewards)
 
 
-env_json_path: "/JSON/Environment/ServerAssignment/N12/N12S1.json"
-total_timesteps: 3.0e7
+env_json_path: "/JSON/Environment/ServerAllocation/N12/N12S1.json"
+total_timesteps: 5.0e+7
 learning_rate: 1.0e-4
 num_envs: 1
 num_steps: 512
@@ -30,15 +30,15 @@ max_grad_norm: 0.5
 target_kl: ~
 alpha: 0.1
 nu: -0.1
-temperature: 1.0
+temperature: 0.5
 learn_temperature: true
 intervention_penalty: 0.00
 
 hidden_size: ~
 hidden_depth: ~
 
-critic_hidden_dims: [3, 64]
-actor_hidden_dims: [3, 64]
+critic_hidden_dims: [4, 128 ]
+actor_hidden_dims: [4, 128]
 
 reward_scale: .001
 obs_scale: 50
