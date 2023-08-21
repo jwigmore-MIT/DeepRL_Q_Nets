@@ -14,14 +14,20 @@ delivered = 0
 rewards = 0
 test_length = 100
 pbar = tqdm(range(int(test_length)))
+actions = np.zeros(test_length)
+observations = np.zeros((test_length, env.observation_space.shape[0]))
+masks = np.zeros((test_length, env.get_mask().shape[0]))
 for t in pbar:
     #action = env.action_space.sample() # JRQ
-
+    mask = env.get_mask()
     action = env.get_stable_action(type = "JSQ") # JSQ
 
-    step = env.step(action, debug=False)
+    step = env.step(action, debug=True)
+    actions[t] = action
     arrivals += step[4]['n_arrivals']
     delivered += step[4]['delivered']
+    observations[t] = env.get_obs()
+    masks[t] = mask
     rewards+=step[1]
 
 average_reward = np.sum(rewards)/test_length

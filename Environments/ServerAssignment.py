@@ -35,17 +35,20 @@ class ServerAssignment(gym.Env):
         # Spaces
         self.observation_space = gym.spaces.Box(low=0, high=1e6, shape=(len(self.buffers),), dtype=np.float32)
         self.action_space = gym.spaces.Discrete(self.n_servers+1)
+
     def step(self, action, debug = False):
         # the action is an integer indicating the server to send the arrived packet too
         info = {}
-
+        if debug: debug_strs = []
         # Step 0: Check if action is valid
-        if debug: init_buffer = deepcopy(self.buffers)
+        if debug: debug_strs.append(f"Initial Buffer: {deepcopy(self.buffers)}")
+        if debug: debug_strs.append(f"Mask: {self.get_mask()}")
         server_action = action
         if server_action > self.n_servers+1:
             raise ValueError(f"Invalid action {action} for {self.n_servers} servers")
         curr_capacities = self.get_cap()
-
+        if debug: debug_strs.append(f"Capacities: {curr_capacities}")
+        if debug: debug_strs.append(f"Action: {action}")
         # Step 1: Send the packet to the appropriate server
         if action > 0:
             if self.buffers[0] > 0:
@@ -56,21 +59,22 @@ class ServerAssignment(gym.Env):
                 ignore_action = True
         else: # action == 0
             ignore_action = False
-        if debug: post_action_buffer = deepcopy(self.buffers)
+        if debug: debug_strs.append(f"Post-Action Buffer: {self.buffers}")
 
         # Step 2: Simulate the service process
         delivered = self._serve_step()
 
-        if debug: post_serve_buffer = deepcopy(self.buffers)
-
+        if debug: debug_strs.append(f"Post-Service Buffer {deepcopy(self.buffers)}")
 
         # Step 3: Get the corresponding reward
         reward = self._get_reward()
-
+        if debug: debug_strs.append(f"Reward: {reward}")
 
 
         # Step 4: Simulate New Arrivals
         n_arrivals = self._sim_arrivals()
+        if debug: debug_strs.append(f"Arrivals: {n_arrivals}")
+        if debug: debug_strs.append(f"Post-Arrival Buffer: {deepcopy(self.buffers)}")
 
         # Simulate new link capacities
         self._sim_capacities()
@@ -88,9 +92,11 @@ class ServerAssignment(gym.Env):
         terminated = False
         truncated = False
 
-        if debug: self._debug_printing(init_buffer, curr_capacities, delivered, post_serve_buffer,
-                                       ignore_action, action, server_action, post_action_buffer,
-                                       post_arrival_buffer, n_arrivals, reward)
+        # if debug: self._debug_printing(init_buffer, curr_capacities, delivered, post_serve_buffer,
+        #                                ignore_action, action, server_action, post_action_buffer,
+        #                                post_arrival_buffer, n_arrivals, reward)
+
+        if debug: self._debug_printing2(debug_strs)
 
         return next_state, reward, terminated, truncated, info
 
@@ -116,6 +122,13 @@ class ServerAssignment(gym.Env):
         print(f"Post Arrival Buffer: {post_arrival_buffer}")
         print("="*20)
         print("\n")
+
+    def _debug_printing2(self, debug_strs):
+
+        for debug_str in debug_strs:
+            print(debug_str)
+        print("=" * 20)
+
 
     def _init_nodes(self, net_para_nodes):
         nodes = eval(net_para_nodes)
@@ -176,9 +189,28 @@ class ServerAssignment(gym.Env):
     def get_cap(self):
         return np.array(list(self.Cap.values())[self.n_servers:])
 
+    def get_mask(self):
+        """
+        Cases:
+        1. No arrivals -> mask all but action 0
+        2. Arrival -> Mask action 0
+        Returns
+        -------
+        """
+        mask = np.bool_(np.zeros(self.n_servers+1))
+        if self.get_obs()[0] == 0:
+            mask[1:] = True
+        else:
+            mask[0] = True
+        return mask
+
+
     def get_stable_action(self, type = "JSQ"):
         if type == "JSQ":
-            return np.argmin(self.get_buffers())
+            if self.get_obs()[0] == 0:
+                return 0
+            else:
+                return np.argmin(self.get_buffers()[1:])+1
         else:
             raise NotImplementedError
     def _sim_arrivals(self):
