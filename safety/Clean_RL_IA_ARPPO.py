@@ -399,8 +399,9 @@ if __name__ == "__main__":
 
     # Test the trained policy
     if args.test:
-        #args.test_steps = 100000
+        args.test_steps = 100000
         args.test_log_interval = 1000
+
         test_obs = torch.zeros((args.test_steps,1) + envs.single_observation_space.shape).to(device)
         test_actions = torch.zeros((args.test_steps,1) + envs.single_action_space.shape).to(device)
         test_interventions = torch.zeros((args.test_steps)).to(device)
@@ -420,12 +421,12 @@ if __name__ == "__main__":
             test_obs[t] = next_obs
 
             if envs.get_attr("get_backlog")[0] > args.int_thresh:  # minus one to account for the source packet
-                buffers = envs.get_attr("get_obs")[0][1:-1]
-                np_action = np.argmin(buffers)
+                buffers = envs.get_attr("get_obs")[0]
+                np_action = envs.call("get_stable_action",args.stable_policy)[0]
                 action = torch.Tensor([np_action])
                 # action = torch.Tensor(np.argmin(buffers)).to(device)
                 with torch.no_grad():
-                    _, log_prob, _, value = agent.get_action_and_value(next_obs, action)
+                    _, log_prob, _, value = agent.get_action_and_value(next_obs.to(device), action.to(device))
                     test_interventions[t] = torch.Tensor([1]).to(device)
             else:
                 # ALGO LOGIC: action logic
@@ -435,7 +436,7 @@ if __name__ == "__main__":
             test_actions[t] = action
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, terminated, truncated, info = envs.step(action.cpu().numpy())
+            next_obs, reward, terminated, truncated, info = envs.step(action.cpu().numpy().astype(int))
             done = terminated | truncated
             test_rewards[t] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
