@@ -116,7 +116,20 @@ def parse_args_or_config(config_path = None):
         raise Exception("Must specify whether or not to apply mask")
     if not hasattr(args, "obs_links"):
         raise Exception("Must specify obs_links <bool> (ie whether or not link states are seen by agent")
-    # fmt: on
+    if not hasattr(args, "eval_steps"):
+        print("eval_steps not specified, setting to 10000")
+        args.eval_steps = 10000
+    if not hasattr(args, "eval_freq"):
+        print("eval_freq not specified, setting to 100000")
+        args.eval_freq = 100000
+    if not hasattr(args, "do_eval"):
+        print("do_eval not specified, setting to True")
+        args.do_eval = True
+    # format all step args at integers
+    for arg in args:
+        if arg.__contains__("step"):
+            setattr(args, arg, int(getattr(args, arg)))
+
     return args
 
 def clean_rl_ppo_parse_config(config_file_name: str, run_type = "TRAIN"):

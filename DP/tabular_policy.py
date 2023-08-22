@@ -13,4 +13,6 @@ class TabularPolicy(DeterministicPolicy):
         return self.policy_table[state]
 
     def update(self, state, action):
+        if not isinstance(state, tuple):
+            state = tuple(state)
         self.policy_table[state] = action

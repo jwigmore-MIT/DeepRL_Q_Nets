@@ -17,9 +17,8 @@ def create_state_map(low, high):
     return state_combos, state_combos[:, :2]
 
 def create_transition_map(state, p_arrival, p_link):
+    pass
 
-
-@chex.dataclass
 class M2A1Config(shinrl.EnvConfig):
     servers = 2
     s_max = 10

@@ -28,8 +28,8 @@ class ValueFunction():
     def extract_policy(self, mdp):
         policy = TabularPolicy()
         for state in mdp.get_states():
-            if not isinstance(state, tuple):
-                state = tuple(state)
+            # if not isinstance(state, tuple):
+            #     state = tuple(state)
             max_q = float("-inf")
             for action in mdp.get_actions(state):
                 q_value = self.get_q_value(mdp, state, action)

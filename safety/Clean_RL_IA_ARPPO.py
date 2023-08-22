@@ -109,10 +109,84 @@ class Agent(nn.Module):
             action = probs.sample()
         return action, probs.log_prob(action), probs.entropy(), self.critic(x)
 
+def eval_model(agent, args, train_step = 0, test = False, pbar = None):
+    if pbar is not None:
+        if not test:
+            pbar.set_description(f"Running Eval - Train Step {train_step}")
+        else:
+            pbar.set_description(f"Running Test - Train Step {train_step}")
+
+    """Evaluate the agent"""
+    # Generate the eval environment
+    eval_env = generate_clean_rl_env(args)()
+    # Set new seed for each eval
+    seed = args.seed + train_step
+    # Set agent to eval mode
+    agent.eval()
+    steps = args.eval_steps if not test else args.test_steps
+    # Initialize variables
+    eval_obs = torch.zeros((steps, 1) + eval_env.observation_space.shape).to(args.device)
+    eval_actions = torch.zeros((steps, 1) + eval_env.action_space.shape).to(args.device)
+    eval_interventions = torch.zeros((steps)).to(args.device)
+    eval_rewards = torch.zeros((steps)).to(args.device)
+    eval_backlogs = np.zeros((steps))
+    agent.eval()
+    next_obs_array, next_info = eval_env.reset(seed = seed)
+    next_obs = torch.Tensor(next_obs_array).to(device)
+    eval_sum_backlogs = 0
+    for t in range(steps):
+        observation_checker(next_obs)
+        eval_obs[t] = next_obs
+
+        if eval_env.get_backlog() > args.int_thresh:  # minus one to account for the source packet
+
+            np_action = eval_env.get_stable_action(args.stable_policy)
+            action = torch.Tensor([np_action])
+            # action = torch.Tensor(np.argmin(buffers)).to(device)
+            with torch.no_grad():
+                _, log_prob, _, value = agent.get_action_and_value(next_obs.to(device), action.to(device))
+                eval_interventions[t] = torch.Tensor([1]).to(device)
+        else:
+            # ALGO LOGIC: action logic
+            with torch.no_grad():
+                if args.apply_mask:
+                    mask = eval_env.get_mask()
+                else:
+                    mask = None
+                action, logprob, _, value = agent.get_action_and_value(next_obs, mask = mask)
+                eval_interventions[t] = torch.Tensor([0]).to(device)
+        eval_actions[t] = action
+
+        # TRY NOT TO MODIFY: execute the game and log data.
+        next_obs, reward, terminated, truncated, info = eval_env.step(action.item())
+        done = np.array(terminated | truncated)
+        eval_rewards[t] = torch.tensor(reward).to(device).view(-1)
+        next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
+        eval_backlogs[t] = info['backlog']
+        eval_sum_backlogs += info['backlog']
+        if t > 0 and t % 100 == 0:
+            if t >= args.window_size:
+                window_averaged_backlog = np.mean(
+                    eval_backlogs[t - args.window_size:t])
+            else:
+                window_averaged_backlog = np.mean(eval_backlogs[:t])
+            lta_backlogs = np.cumsum(eval_backlogs[:t]) / np.arange(1, t + 1)
+            wb_prefix = f"eval/eval_{train_step}" if not test else "test"
+            wandb.log({f"{wb_prefix}/lta_backlogs": lta_backlogs[-1],
+                       #f"{wb_prefix}/window_averaged_backlog": window_averaged_backlog,
+                       f"eval/eval_step": t})
+    wandb.log({f"eval/eval_lta_backlog": lta_backlogs[-1],
+               f"eval/global_steps": train_step,})
+
+    return lta_backlogs[-1]
+
+
+
+
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl/ServerAllocation/M10/M10A1-O_IA_AR_PPO.yaml"
+    config_file = "clean_rl/ServerAllocation/M2/M2A2-O_IA_AR_PPO.yaml"
 
 
     args = parse_args_or_config(config_file)
@@ -206,7 +280,7 @@ if __name__ == "__main__":
     # Average Reward Variables
     eta = 0
     beta = 0
-
+    elapsed_eval_time = 0
     for update in pbar:
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -264,6 +338,17 @@ if __name__ == "__main__":
             window_average_backlog = np.mean(window_backlogs)
             writer.add_scalar("window_average_backlog", window_average_backlog, global_step)
         else: window_average_backlog = None
+
+        # Eval
+        if args.do_eval:
+            elapsed_eval_time += args.num_steps
+            if elapsed_eval_time >= args.eval_freq:
+                elapsed_eval_time = 0
+                eval_LTA_Backlog = eval_model(agent, args, train_step = global_step, test = False, pbar= pbar)
+                #make sure agent is in train mode
+                agent.train()
+                pbar.set_description("Training Episodes")
+
 
 
         # Update Average Reward Variables
@@ -399,59 +484,60 @@ if __name__ == "__main__":
 
     # Test the trained policy
     if args.test:
-        args.test_steps = 100000
-        args.test_log_interval = 1000
-
-        test_obs = torch.zeros((args.test_steps,1) + envs.single_observation_space.shape).to(device)
-        test_actions = torch.zeros((args.test_steps,1) + envs.single_action_space.shape).to(device)
-        test_interventions = torch.zeros((args.test_steps)).to(device)
-        test_rewards = torch.zeros((args.test_steps)).to(device)
-        test_backlogs = np.zeros((args.test_steps))
-        total_backlogs = np.zeros((args.test_steps))
-        envs.reset()
-        agent.eval()
-
-        next_obs_array, next_info = envs.reset()
-        next_obs = torch.Tensor(next_obs_array).to(device)
-
-        test_sum_backlogs = 0
-        pbar = tqdm(range(args.test_steps), ncols=80, desc="Test Episode")
-        for t in pbar:
-            observation_checker(next_obs)
-            test_obs[t] = next_obs
-
-            if envs.get_attr("get_backlog")[0] > args.int_thresh:  # minus one to account for the source packet
-                buffers = envs.get_attr("get_obs")[0]
-                np_action = envs.call("get_stable_action",args.stable_policy)[0]
-                action = torch.Tensor([np_action])
-                # action = torch.Tensor(np.argmin(buffers)).to(device)
-                with torch.no_grad():
-                    _, log_prob, _, value = agent.get_action_and_value(next_obs.to(device), action.to(device))
-                    test_interventions[t] = torch.Tensor([1]).to(device)
-            else:
-                # ALGO LOGIC: action logic
-                with torch.no_grad():
-                    action, logprob, _, value = agent.get_action_and_value(next_obs)
-                    test_interventions[t] = torch.Tensor([0]).to(device)
-            test_actions[t] = action
-
-            # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, terminated, truncated, info = envs.step(action.cpu().numpy().astype(int))
-            done = terminated | truncated
-            test_rewards[t] = torch.tensor(reward).to(device).view(-1)
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
-            test_backlogs[t] = info['backlog'][0]
-            test_sum_backlogs += info['backlog'][0]
-            if t > 0 and t % args.test_log_interval == 0:
-                if t >= args.window_size:
-                    window_averaged_backlog = np.mean(
-                        test_backlogs[t - args.window_size:t])
-                else:
-                    window_averaged_backlog = np.mean(test_backlogs[:t])
-                lta_backlogs = np.cumsum(test_backlogs[:t]) / np.arange(1, t + 1)
-                wandb.log({"test/lta_backlogs": lta_backlogs[-1],
-                           "test/window_averaged_backlog": window_averaged_backlog,
-                           "test_step": t})
+        eval_model(agent, args, train_step = global_step, test = True)
+        # args.test_steps = 100000
+        # args.test_log_interval = 1000
+        #
+        # test_obs = torch.zeros((args.test_steps,1) + envs.single_observation_space.shape).to(device)
+        # test_actions = torch.zeros((args.test_steps,1) + envs.single_action_space.shape).to(device)
+        # test_interventions = torch.zeros((args.test_steps)).to(device)
+        # test_rewards = torch.zeros((args.test_steps)).to(device)
+        # test_backlogs = np.zeros((args.test_steps))
+        # total_backlogs = np.zeros((args.test_steps))
+        # envs.reset()
+        # agent.eval()
+        #
+        # next_obs_array, next_info = envs.reset()
+        # next_obs = torch.Tensor(next_obs_array).to(device)
+        #
+        # test_sum_backlogs = 0
+        # pbar = tqdm(range(args.test_steps), ncols=80, desc="Test Episode")
+        # for t in pbar:
+        #     observation_checker(next_obs)
+        #     test_obs[t] = next_obs
+        #
+        #     if envs.get_attr("get_backlog")[0] > args.int_thresh:  # minus one to account for the source packet
+        #         buffers = envs.get_attr("get_obs")[0]
+        #         np_action = envs.call("get_stable_action",args.stable_policy)[0]
+        #         action = torch.Tensor([np_action])
+        #         # action = torch.Tensor(np.argmin(buffers)).to(device)
+        #         with torch.no_grad():
+        #             _, log_prob, _, value = agent.get_action_and_value(next_obs.to(device), action.to(device))
+        #             test_interventions[t] = torch.Tensor([1]).to(device)
+        #     else:
+        #         # ALGO LOGIC: action logic
+        #         with torch.no_grad():
+        #             action, logprob, _, value = agent.get_action_and_value(next_obs)
+        #             test_interventions[t] = torch.Tensor([0]).to(device)
+        #     test_actions[t] = action
+        #
+        #     # TRY NOT TO MODIFY: execute the game and log data.
+        #     next_obs, reward, terminated, truncated, info = envs.step(action.cpu().numpy().astype(int))
+        #     done = terminated | truncated
+        #     test_rewards[t] = torch.tensor(reward).to(device).view(-1)
+        #     next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
+        #     test_backlogs[t] = info['backlog'][0]
+        #     test_sum_backlogs += info['backlog'][0]
+        #     if t > 0 and t % args.test_log_interval == 0:
+        #         if t >= args.window_size:
+        #             window_averaged_backlog = np.mean(
+        #                 test_backlogs[t - args.window_size:t])
+        #         else:
+        #             window_averaged_backlog = np.mean(test_backlogs[:t])
+        #         lta_backlogs = np.cumsum(test_backlogs[:t]) / np.arange(1, t + 1)
+        #         wandb.log({"test/lta_backlogs": lta_backlogs[-1],
+        #                    "test/window_averaged_backlog": window_averaged_backlog,
+        #                    "test_step": t})
 
 
 

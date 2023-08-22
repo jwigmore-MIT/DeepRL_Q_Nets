@@ -5,10 +5,10 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-config_file = "clean_rl/ServerAllocation/M10/M10A1-O_IA_AR_PPO.yaml"
+config_file = "clean_rl/ServerAllocation/M2/M2A2-O_IA_AR_PPO.yaml"
 args = clean_rl_ppo_parse_config(config_file)
 if args.obs_links:
-    run_types = ["LCQ", "RCQ", "LRCQ"]#,"RQ"]
+    run_types = ["LCQ", "RCQ", "MWCQ"]#,"RQ"]
 else:
     run_types = ["LQ", "RQ", "MRQ"] # RQ
 
@@ -33,7 +33,7 @@ for run_type in run_types:
     torch.manual_seed(args.seed)
 
 
-    test_length = int(3e6)
+    test_length = int(3e4)
     wandb_log_interval = 1000
     backlogs = np.zeros(test_length)
     pbar = tqdm(range(int(test_length)))

@@ -4,10 +4,12 @@ from collections import defaultdict
 from itertools import product
 from mdp import MDP
 from value_iteration import ValueIteration
+from safety.utils import clean_rl_ppo_parse_config
 import pickle
+from copy import deepcopy
 
 
-class ServerAllocationMDP(MDP):
+class M2A1ServerAllocationMDP(MDP):
     def __init__(self):
         self.A = np.arange(3)
         self.Servers = 2
@@ -73,6 +75,63 @@ class ServerAllocationMDP(MDP):
     def get_goal_states(self):
         return None
 
+class ServerAllocationMDP(MDP):
+    def __init__(self, tx_matrix, actions = [0,1,2], n_queues = 2, q_max = 10):
+        self.tx_matrix = tx_matrix
+        self.actions = actions
+        self.n_queues = n_queues
+        self.q_max = q_max
+        self.discount = 0.999
+    def get_states(self):
+        # return all possible states from 0 to s_max for each server
+        return [list(state)[:-1] for state in self.tx_matrix.keys()]
+
+    def get_transitions(self, state, action):
+        key = deepcopy(state)
+        key.append(action)
+        tx_dict = self.tx_matrix[tuple(key)]
+        transitions = list(zip(list(tx_dict.keys()), list(tx_dict.values())))
+
+        return transitions
+
+    def get_reward(self, state, action, next_state):
+        next_buffers = next_state[:self.n_queues]
+        if action >0:
+            if state[action-1] == 0: # if the action for the chosen queue is empty
+                return -1000
+            elif state[self.n_queues+action - 1] == 0: # if the link for the chosen action has zero capacity
+                return -1000
+        if np.any(np.array(next_buffers) >= self.q_max):
+            return -100
+        else:
+            return -np.sum(next_buffers)
+
+    def get_actions(self, state):
+        buffers = np.array(state[:self.n_queues])
+        servers = np.array(state[self.n_queues:])
+        if np.all(buffers == 0):
+            return [0]
+        else:
+            buf_serv = buffers*servers
+            if np.all(buf_serv == 0):
+                return [0]
+            else:
+                return np.where(buf_serv > 0)[0] + 1
+
+    def get_initial_state(self):
+        return np.zeros(self.n_queues*2)
+
+    def is_terminal(self, state):
+        return False
+
+    def get_discount_factor(self):
+        return self.discount
+
+    def get_goal_states(self):
+        return None
+
+
+
 
 
 # Example usage
@@ -102,15 +161,17 @@ def create_state_map(low, high):
 
 from tabular_value_function import TabularValueFunction
 
-mdp = ServerAllocationMDP()
+#mdp = ServerAllocationMDP()
+tx_matrix = pickle.load(open("../safety/M2A2-O_tx_matrix_1000.pkl", "rb"))
+mdp = ServerAllocationMDP(tx_matrix)
 values = TabularValueFunction()
-ValueIteration(mdp, values).value_iteration(max_iterations=1000)
+ValueIteration(mdp, values).value_iteration(max_iterations=50, theta=1.0)
 
 policy = values.extract_policy(mdp)
 # convert policy.policy_table to normal dictionary
 policy_table = dict(policy.policy_table)
 
 
-pickle.dump(policy_table, open("M2A1_policy_table.p", "wb"))
+pickle.dump(policy_table, open("M2A2_policy_table.p", "wb"))
 
 

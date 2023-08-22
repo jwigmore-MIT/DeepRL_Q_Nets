@@ -3,6 +3,13 @@ import gymnasium as gym
 from copy import deepcopy
 import numpy as np
 
+
+def create_rv(rng, nums, probs):
+    if isinstance(nums, int):
+        return bern_rv(rng, num=nums, prob=probs)
+    elif isinstance(nums, list):
+        return categorical_rv(rng, nums=nums, probs=probs)
+
 class bern_rv:
 
     def __init__(self, rng, num = 1, prob = 0.5):
@@ -15,6 +22,31 @@ class bern_rv:
             return self.num
         else:
             return int(self.rng.choice([0, self.num], 1, p=[1 - self.prob, self.prob]))
+
+    def mean(self):
+        return self.num * self.prob
+
+    def max(self):
+        return self.num
+class categorical_rv:
+
+    def __init__(self, rng, nums = [0,1], probs = None):
+        self.rng = rng
+        self.nums = nums
+        self.probs = probs
+
+    def sample(self):
+        if self.probs is None:
+            return self.nums
+        else:
+            return int(self.rng.choice(self.nums, 1, p=self.probs))
+
+    def mean(self):
+        return np.dot(self.nums, self.probs)
+
+    def max(self):
+        return np.max(self.nums)
+
 class ServerAllocation(gym.Env):
 
     def __init__(self, net_para):
@@ -52,7 +84,7 @@ class ServerAllocation(gym.Env):
     def step(self, action, debug = False):
         # the action is an integer indicating the server to send the arrived packet too
         info = {}
-
+        action = int(action)
         # Step 0: Convert action to the queue number and check if it is valid
         if debug: init_buffer = deepcopy(self.buffers)
         current_capacities = deepcopy(self.Cap)
@@ -65,8 +97,9 @@ class ServerAllocation(gym.Env):
 
             if self.get_obs().sum() > 0: #only apply an action if the queue is not empty
                 ignore_action = False
-                self.buffers[action] -= min(1 * self.Cap[action-1], self.buffers[action])
-                delivered = 1 * self.Cap[action-1]
+                delivered = min(1 * self.Cap[action-1], self.buffers[action])
+                self.buffers[action] -= delivered
+
             else:
                 ignore_action = True
                 delivered = 0
@@ -174,15 +207,23 @@ class ServerAllocation(gym.Env):
             cap = self.get_cap()
             connected_obs = cap * q_obs
             action = np.random.choice(np.where(connected_obs == connected_obs.max())[0]) + 1
-        elif type == "MRQ": #Most Reliable Queue
-            p_cap = 1 - self.unreliabilities
+        elif type == "MWQ": #Max Weighted Queue
+            p_cap = self.service_rate
             valid_obs = q_obs > 0
             # choose the most reliable queue that is not empty
-            valid_p_cap = p_cap * valid_obs
+            valid_p_cap = p_cap * valid_obs**2
             if np.all(valid_obs == False):
                 action = 0
             else:
                 action = np.random.choice(np.where(valid_p_cap == valid_p_cap.max())[0]) + 1
+        elif type == "MWCQ": #Max Weighted Connected Queue
+            cap = self.get_cap()
+            weighted_obs = cap * q_obs**2
+            if np.all(weighted_obs == 0):
+                action = 0
+            else:
+                action = np.random.choice(np.where(weighted_obs == weighted_obs.max())[0]) + 1
+
         elif type == "RCQ": # Random Connected Queue
             cap = self.get_cap()
             connected_obs = cap * q_obs
@@ -215,7 +256,10 @@ class ServerAllocation(gym.Env):
             action = action.astype(int)
         return action
 
-
+    def get_serviceable_buffers(self):
+        if self.obs_links:
+            temp = self.get_buffers() * self.get_cap()
+            return temp
     def get_mask(self):
         """
         Cases:
@@ -240,7 +284,13 @@ class ServerAllocation(gym.Env):
             mask[1:] = self.get_buffers() < 1 # mask all empty buffers
         # masking based on connected links
         if self.obs_links:
-            mask[1:] = np.logical_or(mask[1:], 1-self.get_cap())
+            mask[1:] = np.logical_not(self.get_serviceable_buffers())
+            if np.all(mask[1:]==True):
+                mask[0] = False
+        if np.all(mask):
+            raise ValueError("Mask should not be all True")
+        elif np.all(mask == False):
+            raise ValueError("Mask should not be all False")
         return mask
 
 
@@ -260,22 +310,25 @@ class ServerAllocation(gym.Env):
             capacity = cap_dict['(0,0)']['capacity']
             probability = cap_dict['(0,0)']['probability']
             for link in self.links:
-                caps[link] = bern_rv(self.rng, num=capacity, prob = probability)
+                caps[link] = create_rv(self.rng, num=capacity, prob = probability)
 
         for link, l_info in cap_dict.items():
             if isinstance(link, str):
                 link = eval(link)
             if link == (0,0):
                 continue
-            rv = bern_rv(self.rng, num = l_info['capacity'], prob= l_info['probability'])
+            capacity = eval(l_info['capacity']) if isinstance(l_info['capacity'], str) else l_info['capacity']
+            probability = eval(l_info['probability']) if isinstance(l_info['probability'], str) else l_info['probability']
+
+            rv = create_rv(self.rng, nums = capacity, probs = probability)
             caps[link] = rv
 
             # generate unreliabilities
-        unrel = []
+        service_rate = []
         for link in self.links:
             if link[1] == self.destination:
-                unrel.append(1-caps[link].prob)
-        self.unreliabilities = np.array(unrel)
+                service_rate.append(caps[link].mean())
+        self.service_rate = np.array(service_rate)
 
 
         if (0,0) in caps.keys():
@@ -306,5 +359,175 @@ class ServerAllocation(gym.Env):
                 arrivals[source-1] += 1
         return arrivals
 
+    def set_state(self, state):
+        if self.obs_links:
+            for i in range(self.n_queues):
+                self.buffers[i+1] = state[i]
+            for j in range(self.n_queues):
+                self.Cap[j] = state[j+self.n_queues]
+
+        return self.get_obs()
+
+    def estimate_transitions(self, state, action, max_samples = 1000, min_samples = 100, theta = 0.001):
+
+        C_sas = {} # counter for transitions (s,a,s')
+        P_sas = {} # probabilities for transitions (s,a,s')
+        diff = {}
+        for n in range(max_samples):
+            self.set_state(state)
+            next_state, _, _, _, _ = self.step(action)
+            if tuple(next_state) in C_sas.keys():
+                C_sas[tuple(next_state)] += 1
+                psas = C_sas[tuple(next_state)]/(n+1)
+                diff[tuple(next_state)] = np.abs(P_sas[tuple(next_state)] - psas)
+                P_sas[tuple(next_state)] = psas
+            else:
+                C_sas[tuple(next_state)] = 1
+                P_sas[tuple(next_state)] = 1/(n+1)
+            if n > min_samples and np.all(list(diff.values())) < theta:
+                break
+
+        # convert to probabilities
+
+        return P_sas, n
+
+from DP.mdp import MDP
+from DP.value_iteration import ValueIteration
+from DP.tabular_value_function import TabularValueFunction
 
 
+class ServerAllocationMDP(MDP):
+
+    def __init__(self, env, q_max = 10, discount = 0.999):
+        self.actions = list(np.arange(env.action_space.n))
+        self.n_queues = env.n_queues
+        self.state_list = self.get_state_list(env, q_max = q_max)
+        self.tx_matrix = None
+        self.q_max = q_max
+        self.discount = discount
+        self.env = deepcopy(env)
+
+
+
+    def get_state_list(self, env, q_max):
+        def create_state_map(low, high):
+            state_elements = []
+            for l, h in zip(low, high):
+                state_elements.append(list(np.arange(l, h + 1)))
+            state_combos = np.array(np.meshgrid(*state_elements)).T.reshape(-1, len(state_elements))
+            # convert all arrays in state_combos to lists
+            state_combos = [list(state) for state in state_combos]
+            return state_combos
+
+        high_queues = np.ones(env.n_queues) * q_max
+        high_links = np.array([rv.max() for rv in env.capacities_fcn])
+        high = np.concatenate((high_queues, high_links))
+        low = np.zeros_like(high)
+        state_list = create_state_map(low, high)
+        return state_list
+    def estimate_tx_matrix(self, max_samples = 1000, min_samples = 100, theta = 0.001):
+        self.tx_matrix, self.n_tx_samples = form_transition_matrix(self.env, self.state_list, self.actions, max_samples, min_samples, theta)
+        self.num_s_a_pairs = np.sum([len(self.tx_matrix[key]) for key in self.tx_matrix.keys()])
+        num_samples = np.array(list(self.n_tx_samples.values()))
+
+        print("Transition Matrix Estimated")
+        print("Mean number of samples per state-action pair: ", np.mean(num_samples))
+        print("Number of state-action pairs: ", self.num_s_a_pairs)
+        return self.tx_matrix, self.n_tx_samples, self.num_s_a_pairs
+
+    def get_states(self):
+        # return all possible states from 0 to s_max for each server
+        return [list(state)[:-1] for state in self.tx_matrix.keys()]
+
+    def get_transitions(self, state, action):
+        key = deepcopy(state)
+        key.append(action)
+        tx_dict = self.tx_matrix[tuple(key)]
+        transitions = list(zip(list(tx_dict.keys()), list(tx_dict.values())))
+
+        return transitions
+
+    def get_reward(self, state, action, next_state):
+        next_buffers = next_state[:self.n_queues]
+        if action >0:
+            if state[action-1] == 0: # if the action for the chosen queue is empty
+                return -1000
+            elif state[self.n_queues+action - 1] == 0: # if the link for the chosen action has zero capacity
+                return -1000
+        if np.any(np.array(next_buffers) >= self.q_max):
+            return -100
+        else:
+            return -np.sum(next_buffers)
+
+    def get_actions(self, state):
+        buffers = np.array(state[:self.n_queues])
+        servers = np.array(state[self.n_queues:])
+        if np.all(buffers == 0):
+            return [0]
+        else:
+            buf_serv = buffers*servers
+            if np.all(buf_serv == 0):
+                return [0]
+            else:
+                return np.where(buf_serv > 0)[0] + 1
+
+    def get_initial_state(self):
+        return np.zeros(self.n_queues*2)
+
+    def is_terminal(self, state):
+        return False
+
+    def get_discount_factor(self):
+        return self.discount
+
+    def get_goal_states(self):
+        return None
+
+    def do_VI(self, max_iterations = 100, theta = 0.1):
+        if self.tx_matrix is None:
+            raise ValueError("Transition Matrix must be estimated before running VI")
+        value_table = TabularValueFunction()
+        ValueIteration(self, value_table, max_iterations, theta)
+        self.value_table = value_table
+
+    def get_VI_policy(self):
+        if self.value_table is None:
+            raise ValueError("Value Table must be estimated before getting policy")
+        policy = self.value_table.extract_policy(self)
+        policy_table = dict(policy.policy_table)
+
+        self.vi_policy = vi_policy
+
+def form_transition_matrix(env, state_list, action_list, max_samples = 1000, min_samples = 100, theta = 0.001):
+    from tqdm import tqdm
+    """
+    state_list: list of states as lists
+    action_list: list of integers
+    """
+    tx_matrix = {} # keys will be tuples of the form (state, action)
+    n_samples = {}
+    pbar = tqdm(total = len(state_list)**len(action_list))
+    n=0
+    for state in state_list:
+        # get valid actions
+        env.set_state(state)
+        mask = env.get_mask()
+        action_list = np.where(mask == False)[0]
+        for action in action_list:
+            n+=1
+            pbar.update(n)
+            # create a tuple of the form (state, action)
+            key = deepcopy(state)
+            key.extend([action])
+            tx_matrix[tuple(key)], n_samples[tuple(key)] = env.estimate_transitions(state, action, max_samples, min_samples, theta)
+
+    return tx_matrix, n_samples
+
+
+
+def get_state_list(env, q_max):
+    state_list = []
+    for i in range(env.n_queues):
+        state_list.append([0])
+        state_list.append([1])
+    return state_list

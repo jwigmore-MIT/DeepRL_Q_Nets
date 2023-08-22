@@ -1,6 +1,7 @@
 from gridworld import *
 from tabular_value_function import *
 from qtable import *
+from tqdm import tqdm
 
 
 class ValueIteration:
@@ -8,9 +9,9 @@ class ValueIteration:
         self.mdp = mdp
         self.values = values
 
-    def value_iteration(self, max_iterations=100, theta=0.001):
-
-        for i in range(max_iterations):
+    def value_iteration(self, max_iterations=100, theta=0.1):
+        pbar = tqdm(range(int(max_iterations)))
+        for i in pbar:
             delta = 0.0
             new_values = TabularValueFunction()
             for state in self.mdp.get_states():
@@ -38,6 +39,7 @@ class ValueIteration:
                 new_values.update(state, max_q)
 
             self.values.merge(new_values)
+            pbar.set_description(f"Delta: {delta}")
 
             # Terminate if the value function has converged
             if delta < theta:
