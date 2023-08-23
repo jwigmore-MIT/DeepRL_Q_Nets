@@ -1,5 +1,6 @@
 from collections import defaultdict
-from qfunction import QFunction
+
+from DP.qfunction import QFunction
 
 
 class QTable(QFunction):

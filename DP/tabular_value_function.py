@@ -1,5 +1,7 @@
 from collections import defaultdict
-from value_function import ValueFunction
+
+from DP.value_function import ValueFunction
+
 
 class TabularValueFunction(ValueFunction):
     def __init__(self, default=0.0):

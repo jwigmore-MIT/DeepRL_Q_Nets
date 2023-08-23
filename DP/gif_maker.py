@@ -1,5 +1,4 @@
 import matplotlib.animation as animation
-from matplotlib.text import Text
 
 
 class GifMaker:

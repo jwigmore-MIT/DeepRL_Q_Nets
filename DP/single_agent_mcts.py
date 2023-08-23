@@ -1,7 +1,8 @@
 import random
 
-from mcts import Node
 from mcts import MCTS
+from mcts import Node
+
 
 class SingleAgentNode(Node):
     def __init__(

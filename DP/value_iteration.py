@@ -1,7 +1,6 @@
-from gridworld import *
-from tabular_value_function import *
-from qtable import *
 from tqdm import tqdm
+from DP.qtable import *
+from DP.tabular_value_function import *
 
 
 class ValueIteration:

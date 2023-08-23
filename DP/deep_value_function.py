@@ -1,7 +1,8 @@
 import torch.nn as nn
-from value_function import ValueFunction
 from torch.optim import Adam
+
 from deep_agent import DeepAgent
+from value_function import ValueFunction
 
 
 class DeepValueFunction(ValueFunction, DeepAgent):

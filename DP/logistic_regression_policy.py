@@ -3,7 +3,6 @@ import random
 
 from policy import StochasticPolicy
 
-
 """ A two-action policy implemented using logistic regression from first principles """
 
 

@@ -1,4 +1,4 @@
-from extensive_form_game import ExtensiveFormGame
+from DP.extensive_form_game import ExtensiveFormGame
 
 ONE = "1"
 TWO = "2"

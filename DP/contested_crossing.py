@@ -1,9 +1,10 @@
+import warnings
 from collections import defaultdict
+
+import numpy as np
 
 from mdp import *
 from rendering_utils import *
-import numpy as np
-import warnings
 
 SUNK_REWARD = -10
 BERTH_REWARD = 10

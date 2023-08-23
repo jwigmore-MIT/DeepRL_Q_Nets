@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
-from qfunction import QFunction
 from torch.optim import Adam
+
 from deep_agent import DeepAgent
+from qfunction import QFunction
 
 
 class DeepQFunction(QFunction, DeepAgent):

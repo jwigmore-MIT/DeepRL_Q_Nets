@@ -1,6 +1,6 @@
-import random
 from collections import defaultdict
-from policy import DeterministicPolicy
+
+from DP.policy import DeterministicPolicy
 
 
 class TabularPolicy(DeterministicPolicy):

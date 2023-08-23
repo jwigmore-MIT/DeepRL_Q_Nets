@@ -1,5 +1,5 @@
-from potential_function import PotentialFunction
 from gridworld import GridWorld
+from potential_function import PotentialFunction
 
 
 class GridWorldPotentialFunction(PotentialFunction):

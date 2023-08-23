@@ -1,6 +1,7 @@
 from clean_rl_utils import generate_clean_rl_env
 import numpy as np
 from safety.utils import clean_rl_ppo_parse_config
+from Environments.ServerAllocation import ServerAllocationMDP
 from tqdm import tqdm
 import random
 import pickle
@@ -25,7 +26,17 @@ np.random.seed(args.seed)
 env.reset(seed = args.seed)
 
 type = "DP" # Longest Queue (LQ), Random Queue (RQ), Longest Connected Queue (LCQ), Max Weighted Queue (MWQ)
-DP_policy = pickle.load(open("../DP/M2A2_policy_table.p", "rb"))
+#DP_policy = pickle.load(open("DP/M2A2_policy_table.p", "rb"))
+# mdp = ServerAllocationMDP(env, 5)
+# mdp.estimate_tx_matrix(env, max_samples = 100)
+# mdp.do_VI(max_iterations=10)
+# #mdp.get_VI_policy()
+# mdp.save_MDP(f"saved_MDPs/M2A2_O_MDP.p")
+if type == "DP":
+    mdp = pickle.load(open("saved_MDPs/M2A2_O_MDP.p", "rb"))
+
+
+
 
 arrivals = 0
 cap = 0
@@ -52,8 +63,8 @@ for t in pbar:
     if env.get_backlog() == 0:
         action = 0
     elif type == "DP":
-        clip_obs = np.clip(obs, 0, 10)
-        action = DP_policy[tuple(clip_obs)]
+        clip_obs = np.clip(obs, 0, mdp.q_max)
+        action = mdp.use_policy[clip_obs]
     else:
         action = env.get_stable_action(type = type)
     if mask[action] == 1:

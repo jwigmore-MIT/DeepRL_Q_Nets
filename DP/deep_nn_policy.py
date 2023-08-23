@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 from torch.optim import Adam
-import torch.nn.functional as F
 
 from policy import StochasticPolicy
 

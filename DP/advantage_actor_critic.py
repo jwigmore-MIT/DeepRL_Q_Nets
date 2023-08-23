@@ -1,4 +1,4 @@
-from actor_critic import ActorCritic
+from DP.actor_critic import ActorCritic
 
 
 class AdvantageActorCritic(ActorCritic):

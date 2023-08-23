@@ -405,8 +405,7 @@ class ServerAllocationMDP(MDP):
         self.tx_matrix = None
         self.q_max = q_max
         self.discount = discount
-        self.env = deepcopy(env)
-
+        #self.env = deepcopy(env)
 
 
     def get_state_list(self, env, q_max):
@@ -425,14 +424,15 @@ class ServerAllocationMDP(MDP):
         low = np.zeros_like(high)
         state_list = create_state_map(low, high)
         return state_list
-    def estimate_tx_matrix(self, max_samples = 1000, min_samples = 100, theta = 0.001):
-        self.tx_matrix, self.n_tx_samples = form_transition_matrix(self.env, self.state_list, self.actions, max_samples, min_samples, theta)
+    def estimate_tx_matrix(self, env, max_samples = 1000, min_samples = 100, theta = 0.001):
+
+        self.tx_matrix, self.n_tx_samples = form_transition_matrix(env, self.state_list, self.actions, max_samples, min_samples, theta)
         self.num_s_a_pairs = np.sum([len(self.tx_matrix[key]) for key in self.tx_matrix.keys()])
         num_samples = np.array(list(self.n_tx_samples.values()))
 
         print("Transition Matrix Estimated")
         print("Mean number of samples per state-action pair: ", np.mean(num_samples))
-        print("Number of state-action pairs: ", self.num_s_a_pairs)
+        print("Number of state-action pairs: ", np.sum(self.num_s_a_pairs))
         return self.tx_matrix, self.n_tx_samples, self.num_s_a_pairs
 
     def get_states(self):
@@ -487,16 +487,29 @@ class ServerAllocationMDP(MDP):
         if self.tx_matrix is None:
             raise ValueError("Transition Matrix must be estimated before running VI")
         value_table = TabularValueFunction()
-        ValueIteration(self, value_table, max_iterations, theta)
+        ValueIteration(self, value_table).value_iteration(max_iterations, theta)
+        policy = value_table.extract_policy(self)
+        policy_table = dict(policy.policy_table)
+        value_table = dict(value_table.value_table)
+        self.vi_policy = policy_table
         self.value_table = value_table
+
 
     def get_VI_policy(self):
         if self.value_table is None:
             raise ValueError("Value Table must be estimated before getting policy")
         policy = self.value_table.extract_policy(self)
         policy_table = dict(policy.policy_table)
+        self.vi_policy = policy_table
 
-        self.vi_policy = vi_policy
+    def save_MDP(self, path):
+        import pickle
+        with open(path, 'wb') as f:
+            pickle.dump(self, f)
+    def use_policy(self, state):
+        if self.vi_policy is None:
+            raise ValueError("Policy must be estimated before using it")
+        return self.vi_policy[tuple(state)]
 
 def form_transition_matrix(env, state_list, action_list, max_samples = 1000, min_samples = 100, theta = 0.001):
     from tqdm import tqdm
@@ -506,7 +519,7 @@ def form_transition_matrix(env, state_list, action_list, max_samples = 1000, min
     """
     tx_matrix = {} # keys will be tuples of the form (state, action)
     n_samples = {}
-    pbar = tqdm(total = len(state_list)**len(action_list))
+    pbar = tqdm(total = len(state_list)**len(action_list), desc = "Estimating Transition Matrix")
     n=0
     for state in state_list:
         # get valid actions

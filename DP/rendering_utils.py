@@ -1,6 +1,6 @@
 import math
+
 import matplotlib.colors as colours
-from mdp import *
 import matplotlib.pyplot as plt
 
 COLOURS = {
