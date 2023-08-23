@@ -1,12 +1,14 @@
 
-exp_name: "N2S2_CleanRL"
-seed: 5031997
+exp_name: "N4s3_CleanRL"
+env_type: "ServerAssignment"
+obs_links: false
+seed: 5031998
 torch_deterministic: true
 cuda: false
 track: true
 wandb_project_name: "Clean_RL_N4S3"
 capture_video: false
-policy_name: "ARPPO"
+policy_name: "IA-ARPPO"
 save_models: true
 notes: For Clean RL based standard PPO implementation (discounted rewards)
 
@@ -30,11 +32,29 @@ max_grad_norm: 0.5
 target_kl: ~
 alpha: 0.1
 nu: 0.0
+temperature: 0.1
+learn_temperature: true
+intervention_penalty: 0.00
 
 reward_scale: .001
-obs_scale: 0.01
+obs_scale: 20
+
+hidden_size: ~
+hidden_depth: ~
+
+critic_hidden_dims: [2, 64]
+actor_hidden_dims: [2, 64]
 
 int_thresh: 20
+
+apply_mask: true
+stable_policy: SQ
+
+window_size: 10000
+do_eval: false
+test_steps: 1.0e+5
+
+
 
 
 

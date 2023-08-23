@@ -2,7 +2,7 @@
 exp_name: "M2A3_CleanRL"
 env_type: "ServerAllocation"
 obs_links: true
-seed: 5031998
+seed: 503199809
 torch_deterministic: true
 cuda: true
 track: true
@@ -51,12 +51,14 @@ int_thresh: 10
 apply_mask: true
 stable_policy: MWCQ
 
-window_size: 10000
+window_size: 1000
 
-do_eval: true
+do_eval: false
 eval_freq: 100000
 eval_steps: 1.0e+5
 test_steps: 1.0e+5
+
+learning_steps: 1.0e+6
 
 
 

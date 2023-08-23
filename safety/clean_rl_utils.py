@@ -125,6 +125,10 @@ def parse_args_or_config(config_path = None):
     if not hasattr(args, "do_eval"):
         print("do_eval not specified, setting to True")
         args.do_eval = True
+    if not hasattr(args, "learning_steps"):
+        print("learning_steps not specified, setting to total_timesteps")
+        args.learning_steps = args.total_timesteps
+
     # format all step args at integers
     for arg in args:
         if arg.__contains__("step"):
@@ -172,10 +176,12 @@ def clean_rl_ppo_parse_config(config_file_name: str, run_type = "TRAIN"):
     return args
 
 
-def generate_clean_rl_env(config, env_type = "ServerAssigment",normalize = True):
+def generate_clean_rl_env(config, env_type = "ServerAssigment",normalize = True, seed = None):
     config = config
     normalize = normalize
     env_type = config.env_type if hasattr(config, "env_type") else env_type
+    if seed is not None:
+        config.seed = seed
     def thunk():
         env_para = parse_env_json(config.root_dir + config.env_json_path, config)
         env_para["seed"] = config.seed
@@ -188,7 +194,7 @@ def generate_clean_rl_env(config, env_type = "ServerAssigment",normalize = True)
             # check to make sure obs_scale is greater than 1
             if config.obs_scale < 1:
                 raise ValueError("config.obs_scale must be greater than 1")
-            if env_type == "ServerAllocation":
+            if env_type == "ServerAllocation" and env.obs_links:
                 # scale the first half of the observation vector by obsscale
                 # scale the second half of the observation vector by 1/obsscale
                 n_queues = env.n_queues

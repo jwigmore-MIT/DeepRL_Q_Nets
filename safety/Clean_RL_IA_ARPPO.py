@@ -117,10 +117,11 @@ def eval_model(agent, args, train_step = 0, test = False, pbar = None):
             pbar.set_description(f"Running Test - Train Step {train_step}")
 
     """Evaluate the agent"""
-    # Generate the eval environment
-    eval_env = generate_clean_rl_env(args)()
     # Set new seed for each eval
     seed = args.seed + train_step
+    # Generate the eval environment
+    eval_env = generate_clean_rl_env(args)()
+
     # Set agent to eval mode
     agent.eval()
     steps = args.eval_steps if not test else args.test_steps
@@ -173,7 +174,7 @@ def eval_model(agent, args, train_step = 0, test = False, pbar = None):
             lta_backlogs = np.cumsum(eval_backlogs[:t]) / np.arange(1, t + 1)
             wb_prefix = f"eval/eval_{train_step}" if not test else "test"
             wandb.log({f"{wb_prefix}/lta_backlogs": lta_backlogs[-1],
-                       #f"{wb_prefix}/window_averaged_backlog": window_averaged_backlog,
+                       f"{wb_prefix}/window_averaged_backlog": window_averaged_backlog,
                        f"eval/eval_step": t})
     wandb.log({f"eval/eval_lta_backlog": lta_backlogs[-1],
                f"eval/global_steps": train_step,})
@@ -186,7 +187,7 @@ def eval_model(agent, args, train_step = 0, test = False, pbar = None):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl/ServerAllocation/M2/M2A3-O_IA_AR_PPO.yaml"
+    config_file = "clean_rl\ServerAllocation\M2\M2A3-O_IA_AR_PPO.yaml"
 
 
     args = parse_args_or_config(config_file)
@@ -282,6 +283,10 @@ if __name__ == "__main__":
     beta = 0
     elapsed_eval_time = 0
     for update in pbar:
+        # Cutoff learning based on number of steps
+        if global_step > args.learning_steps:
+            agent.eval()
+
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
             frac = 1.0 - (update - 1.0) / num_updates
