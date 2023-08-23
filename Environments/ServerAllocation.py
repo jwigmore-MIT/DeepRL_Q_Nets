@@ -4,6 +4,7 @@ from copy import deepcopy
 import numpy as np
 
 
+
 def create_rv(rng, nums, probs):
     if isinstance(nums, int):
         return bern_rv(rng, num=nums, prob=probs)
@@ -373,19 +374,24 @@ class ServerAllocation(gym.Env):
         C_sas = {} # counter for transitions (s,a,s')
         P_sas = {} # probabilities for transitions (s,a,s')
         diff = {}
-        for n in range(max_samples):
+        for n in range(1, max_samples+1):
             self.set_state(state)
             next_state, _, _, _, _ = self.step(action)
             if tuple(next_state) in C_sas.keys():
-                C_sas[tuple(next_state)] += 1
-                psas = C_sas[tuple(next_state)]/(n+1)
-                diff[tuple(next_state)] = np.abs(P_sas[tuple(next_state)] - psas)
-                P_sas[tuple(next_state)] = psas
+                C_sas[tuple(next_state)] += 1# increment the counter for the visits to next state
+                p_sas = C_sas[tuple(next_state)]/n # calculate the probability of the transition
+                diff[tuple(next_state)] = np.abs(P_sas[tuple(next_state)] - p_sas)
+                P_sas[tuple(next_state)] = p_sas
             else:
                 C_sas[tuple(next_state)] = 1
-                P_sas[tuple(next_state)] = 1/(n+1)
+                P_sas[tuple(next_state)] = 1
+
+            # check for convergence:
             if n > min_samples and np.all(list(diff.values())) < theta:
                 break
+        P_sas = {key: value/n for key, value in C_sas.items()}
+        if np.abs(np.sum(list(P_sas.values())) - 1) > 0.001:
+            raise ValueError("Transition Probabilities do not sum to one")
 
         # convert to probabilities
 
@@ -394,18 +400,30 @@ class ServerAllocation(gym.Env):
 from DP.mdp import MDP
 from DP.value_iteration import ValueIteration
 from DP.tabular_value_function import TabularValueFunction
+import pickle
 
 
 class ServerAllocationMDP(MDP):
 
-    def __init__(self, env, q_max = 10, discount = 0.999):
+    def __init__(self, env, name = "", q_max = 10, discount = 0.99):
         self.actions = list(np.arange(env.action_space.n))
         self.n_queues = env.n_queues
         self.state_list = self.get_state_list(env, q_max = q_max)
         self.tx_matrix = None
         self.q_max = q_max
         self.discount = discount
+        self.name = f"{name}_qmax{q_max}_discount{discount}"
         #self.env = deepcopy(env)
+
+    class TX_Matrix:
+
+        def __init__(self, tx_matrix, n_tx_samples, num_s_a_pairs):
+            self.tx_matrix = tx_matrix
+            self.n_tx_samples = n_tx_samples
+            self.num_s_a_pairs = num_s_a_pairs
+
+        def __call__(self, *args, **kwargs):
+            return self.tx_matrix
 
 
     def get_state_list(self, env, q_max):
@@ -424,25 +442,34 @@ class ServerAllocationMDP(MDP):
         low = np.zeros_like(high)
         state_list = create_state_map(low, high)
         return state_list
-    def estimate_tx_matrix(self, env, max_samples = 1000, min_samples = 100, theta = 0.001):
+    def estimate_tx_matrix(self, env, max_samples = 1000, min_samples = 100, theta = 0.001, save = True):
 
-        self.tx_matrix, self.n_tx_samples = form_transition_matrix(env, self.state_list, self.actions, max_samples, min_samples, theta)
-        self.num_s_a_pairs = np.sum([len(self.tx_matrix[key]) for key in self.tx_matrix.keys()])
-        num_samples = np.array(list(self.n_tx_samples.values()))
-
+        tx_matrix, n_tx_samples = form_transition_matrix(env, self.state_list, self.actions, max_samples, min_samples, theta)
+        num_s_a_pairs = np.sum([len(tx_matrix[key]) for key in tx_matrix.keys()])
+        num_samples = np.array(list(n_tx_samples.values()))
         print("Transition Matrix Estimated")
         print("Mean number of samples per state-action pair: ", np.mean(num_samples))
-        print("Number of state-action pairs: ", np.sum(self.num_s_a_pairs))
-        return self.tx_matrix, self.n_tx_samples, self.num_s_a_pairs
+        print("Number of state-action pairs: ", np.sum(num_s_a_pairs))
+        self.tx_matrix = self.TX_Matrix(tx_matrix, n_tx_samples, num_s_a_pairs)
+
+        if save:
+            pickle.dump(self.tx_matrix, open(f"saved_mdps/{self.name}_max_samples-{max_samples}_tx_matrix.pkl", "wb"))
+
+        return self.tx_matrix
+
+    def load_tx_matrix(self, path):
+        self.tx_matrix = pickle.load(open(path, "rb"))
+        #self.n_tx_samples = {key: len(self.tx_matrix[key]) for key in self.tx_matrix.keys()}
+        return self.tx_matrix,
 
     def get_states(self):
         # return all possible states from 0 to s_max for each server
-        return [list(state)[:-1] for state in self.tx_matrix.keys()]
+        return [list(state)[:-1] for state in self.tx_matrix().keys()]
 
     def get_transitions(self, state, action):
         key = deepcopy(state)
         key.append(action)
-        tx_dict = self.tx_matrix[tuple(key)]
+        tx_dict = self.tx_matrix()[tuple(key)]
         transitions = list(zip(list(tx_dict.keys()), list(tx_dict.values())))
 
         return transitions

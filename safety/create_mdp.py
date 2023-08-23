@@ -18,10 +18,12 @@ max_samples = 1000
 max_vi_iterations = 50
 
 # Create MDP
-mdp = ServerAllocationMDP(env, q_max)
+mdp = ServerAllocationMDP(env, name = "M2A2_O_MDP", q_max = q_max)
 mdp.estimate_tx_matrix(env, max_samples = max_samples)
 mdp.do_VI(max_iterations=max_vi_iterations)
+#mdp.load_tx_matrix('saved_mdps/M2A2_O_MDP_qmax5_discount0.99_max_samples-100_tx_matrix.pkl')
 mdp.save_MDP(f"saved_MDPs/M2A2_O_MDP.p")
+
 
 
 

@@ -4,13 +4,19 @@ import random
 import numpy as np
 import torch
 from tqdm import tqdm
+import pickle
 
 config_file = "clean_rl/ServerAllocation/M2/M2A2-O_IA_AR_PPO.yaml"
 args = clean_rl_ppo_parse_config(config_file)
 if args.obs_links:
-    run_types = ["LCQ", "RCQ", "MWCQ"]#,"RQ"]
+    run_types = ["DP","MWCQ","LCQ", "RCQ"]#,"RQ"]
+
 else:
     run_types = ["LQ", "RQ", "MRQ"] # RQ
+
+DP_path = "saved_MDPs/M2A2_O_MDP.p"
+mdp = pickle.load(open(DP_path, "rb"))
+
 
 
 for run_type in run_types:
@@ -33,7 +39,7 @@ for run_type in run_types:
     torch.manual_seed(args.seed)
 
 
-    test_length = int(3e4)
+    test_length = int(5e5)
     wandb_log_interval = 1000
     backlogs = np.zeros(test_length)
     pbar = tqdm(range(int(test_length)))
@@ -41,7 +47,11 @@ for run_type in run_types:
         if env.get_obs().sum() == 0:
             action = 0
         else:
-            action = env.get_stable_action(type = run_type)
+            if run_type == "DP":
+                clip_obs = np.clip(env.get_obs(), 0, mdp.q_max)
+                action = mdp.use_policy(clip_obs)
+            else:
+                action = env.get_stable_action(type = run_type)
             # if run_type == "LQ":
             #     action = np.argmax(env.get_obs()) + 1  # LQ
             # elif run_type == "SQ":
