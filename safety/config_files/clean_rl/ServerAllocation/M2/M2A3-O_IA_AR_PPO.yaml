@@ -31,7 +31,7 @@ ent_coef: 0.01
 vf_coef: 0.5
 max_grad_norm: 0.5
 target_kl: ~
-alpha: 0.05
+alpha: 0.2
 nu: -0.1
 temperature: 0.5
 learn_temperature: true
@@ -45,6 +45,7 @@ actor_hidden_dims: [2, 64]
 
 reward_scale: .001
 obs_scale: 50
+obs_scale2: 4
 
 int_thresh: 10
 

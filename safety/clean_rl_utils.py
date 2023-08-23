@@ -188,8 +188,14 @@ def generate_clean_rl_env(config, env_type = "ServerAssigment",normalize = True)
             # check to make sure obs_scale is greater than 1
             if config.obs_scale < 1:
                 raise ValueError("config.obs_scale must be greater than 1")
+            if env_type == "ServerAllocation":
+                # scale the first half of the observation vector by obsscale
+                # scale the second half of the observation vector by 1/obsscale
+                env = gym.wrappers.TransformObservation(env, lambda x: np.concatenate((2*x[:len(x)//2]/config.obs_scale-1, 2*x[len(x)//2:]/config.obs_scale2-1)))
+            else:
+                env = gym.wrappers.TransformObservation(env, lambda x: 2 * x / config.obs_scale - 1)
+
             env = gym.wrappers.TransformReward(env, lambda x: x*config.reward_scale)
-            env = gym.wrappers.TransformObservation(env, lambda x: 2*x/config.obs_scale-1)
         return env
     return thunk
 
