@@ -191,7 +191,11 @@ def generate_clean_rl_env(config, env_type = "ServerAssigment",normalize = True)
             if env_type == "ServerAllocation":
                 # scale the first half of the observation vector by obsscale
                 # scale the second half of the observation vector by 1/obsscale
-                env = gym.wrappers.TransformObservation(env, lambda x: np.concatenate((2*x[:len(x)//2]/config.obs_scale-1, 2*x[len(x)//2:]/config.obs_scale2-1)))
+                n_queues = env.n_queues
+                link_obs_scale = np.max(env.observation_space.high[n_queues:])+1
+                env.buffer_obs_scale = config.obs_scale
+                env.link_obs_scale = link_obs_scale
+                env = gym.wrappers.TransformObservation(env, lambda x: np.concatenate((2*x[:n_queues]/config.obs_scale-1, 2*x[n_queues:]/link_obs_scale-1)))
             else:
                 env = gym.wrappers.TransformObservation(env, lambda x: 2 * x / config.obs_scale - 1)
 

@@ -33,7 +33,7 @@ max_grad_norm: 0.5
 target_kl: ~
 alpha: 0.2
 nu: -0.1
-temperature: 0.5
+temperature: 0.1
 learn_temperature: true
 intervention_penalty: 0.00
 
@@ -45,7 +45,6 @@ actor_hidden_dims: [2, 64]
 
 reward_scale: .001
 obs_scale: 50
-obs_scale2: 4
 
 int_thresh: 10
 
