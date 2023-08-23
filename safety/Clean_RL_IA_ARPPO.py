@@ -186,7 +186,7 @@ def eval_model(agent, args, train_step = 0, test = False, pbar = None):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl/ServerAllocation/M2/M2A2-O_IA_AR_PPO.yaml"
+    config_file = "clean_rl/ServerAllocation/M2/M2A3-O_IA_AR_PPO.yaml"
 
 
     args = parse_args_or_config(config_file)
@@ -287,6 +287,7 @@ if __name__ == "__main__":
             frac = 1.0 - (update - 1.0) / num_updates
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
+
         # Generate Trajectory
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs

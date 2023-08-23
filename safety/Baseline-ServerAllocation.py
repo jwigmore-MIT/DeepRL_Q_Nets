@@ -6,7 +6,7 @@ import torch
 from tqdm import tqdm
 import pickle
 
-config_file = "clean_rl/ServerAllocation/M2/M2A2-O_IA_AR_PPO.yaml"
+config_file = "clean_rl/ServerAllocation/M2/M2A3-O_IA_AR_PPO.yaml"
 args = clean_rl_ppo_parse_config(config_file)
 if args.obs_links:
     run_types = ["DP","MWCQ","LCQ", "RCQ"]#,"RQ"]
@@ -14,7 +14,7 @@ if args.obs_links:
 else:
     run_types = ["LQ", "RQ", "MRQ"] # RQ
 
-DP_path = "saved_MDPs/M2A2_O_MDP.p"
+DP_path = "saved_MDPs/M2A3_O_MDP.p"
 mdp = pickle.load(open(DP_path, "rb"))
 
 
@@ -39,7 +39,7 @@ for run_type in run_types:
     torch.manual_seed(args.seed)
 
 
-    test_length = int(5e5)
+    test_length = int(1e6)
     wandb_log_interval = 1000
     backlogs = np.zeros(test_length)
     pbar = tqdm(range(int(test_length)))
@@ -48,7 +48,7 @@ for run_type in run_types:
             action = 0
         else:
             if run_type == "DP":
-                clip_obs = np.clip(env.get_obs(), 0, mdp.q_max)
+                clip_obs = np.clip(env.get_obs(), 0, mdp.q_max-2)
                 action = mdp.use_policy(clip_obs)
             else:
                 action = env.get_stable_action(type = run_type)

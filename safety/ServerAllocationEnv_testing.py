@@ -16,7 +16,7 @@ TODO:
 5. Implement other version of Bai's problems with more nodes
 
 """
-config_file = "clean_rl/ServerAllocation/M2/M2A2-O_IA_AR_PPO.yaml"
+config_file = "clean_rl/ServerAllocation/M2/M2A3-O_IA_AR_PPO.yaml"
 #config_file = "clean_rl/MSSA_N2S1_config1.yaml"
 args = clean_rl_ppo_parse_config(config_file)
 env = generate_clean_rl_env(args, env_type= "ServerAllocation", normalize = False)()
@@ -25,7 +25,7 @@ random.seed(args.seed)
 np.random.seed(args.seed)
 env.reset(seed = args.seed)
 
-type = "MWCQ" # Longest Queue (LQ), Random Queue (RQ), Longest Connected Queue (LCQ), Max Weighted Queue (MWQ)
+type = "DP" # Longest Queue (LQ), Random Queue (RQ), Longest Connected Queue (LCQ), Max Weighted Queue (MWQ)
 #DP_policy = pickle.load(open("DP/M2A2_policy_table.p", "rb"))
 # mdp = ServerAllocationMDP(env, 5)
 # mdp.estimate_tx_matrix(env, max_samples = 100)
@@ -33,7 +33,7 @@ type = "MWCQ" # Longest Queue (LQ), Random Queue (RQ), Longest Connected Queue (
 # #mdp.get_VI_policy()
 # mdp.save_MDP(f"saved_MDPs/M2A2_O_MDP.p")
 if type == "DP":
-    mdp = pickle.load(open("saved_MDPs/M2A2_O_MDP.p", "rb"))
+    mdp = pickle.load(open("saved_MDPs/M2A3_O_MDP.p", "rb"))
 
 
 
@@ -63,7 +63,7 @@ for t in pbar:
     if env.get_backlog() == 0:
         action = 0
     elif type == "DP":
-        clip_obs = np.clip(obs, 0, mdp.q_max)
+        clip_obs = np.clip(obs, 0, mdp.q_max-2)
         action = mdp.use_policy(clip_obs)
     else:
         action = env.get_stable_action(type = type)
@@ -104,6 +104,7 @@ for t in pbar:
     backlogs += step[4]['backlog']
 
 average_reward = np.sum(rewards)/test_length
+lta_average_rewards = np.cumsum(rewards)/np.arange(1, test_length+1)
 average_backlog = np.sum(backlogs)/test_length
 average_arrivals = arrivals/test_length
 average_sum_arrivals = np.sum(arrivals)/test_length

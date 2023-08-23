@@ -112,9 +112,8 @@ class ServerAllocation(gym.Env):
         if (self.get_obs() < 0).any():
             raise ValueError(f"Negative queue size, something is wrong")
 
-
         # Step 2: Get the corresponding reward
-        reward = self._get_reward()
+        #reward = self._get_reward()
 
         # Step 3: Simulate New Arrivals
         n_arrivals = self._sim_arrivals()
@@ -129,6 +128,9 @@ class ServerAllocation(gym.Env):
         # Step 5: Get the new state
         next_state = self.get_obs()
         backlog = self.get_backlog()
+
+        # Step 2: Get the corresponding reward
+        reward = self._get_reward()
 
         # Step 6: Fill out the info dict
         info = {"ignore_action": ignore_action, "current_capacities": current_capacities,"new_capacities": new_capacities, "delivered": delivered,
