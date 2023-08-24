@@ -54,6 +54,7 @@ class Agent(nn.Module):
             self.temperature = nn.Parameter(torch.ones(1)*temperature)
         else:
             self.temperature = temperature
+        self.deterministic = False
 
 
 
@@ -91,6 +92,7 @@ class Agent(nn.Module):
         self.actor = nn.Sequential(*actor_layers)
 
 
+
     def get_value(self, x):
         return self.critic(x)
 
@@ -106,7 +108,10 @@ class Agent(nn.Module):
             logits[mask] = self.mask_value
         probs = Categorical(logits=logits)
         if action is None:
-            action = probs.sample()
+            if self.deterministic:
+                action = torch.argmax(logits, dim=-1)
+            else:
+                action = probs.sample()
         return action, probs.log_prob(action), probs.entropy(), self.critic(x)
 
 def eval_model(agent, args, train_step = 0, test = False, pbar = None):
@@ -276,22 +281,29 @@ if __name__ == "__main__":
     next_obs = torch.Tensor(next_obs_array).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = args.total_timesteps // args.batch_size
-    pbar = tqdm(range(num_updates), ncols=80, desc="Training Episodes")
+    #pbar = tqdm(range(num_updates), ncols=80, desc="Training Episodes")
+    pbar = tqdm(total = args.total_timesteps, ncols=80, desc="Training Steps")
 
     # Average Reward Variables
     eta = 0
     beta = 0
     elapsed_eval_time = 0
-    for update in pbar:
+    for update in range(num_updates):
+        pbar.update(n = args.num_steps)
         # Cutoff learning based on number of steps
-        if global_step > args.learning_steps:
-            agent.eval()
+
 
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
             frac = 1.0 - (update - 1.0) / num_updates
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
+
+        if global_step > args.learning_steps:
+            lr_now = 0
+            optimizer.param_groups[0]["lr"] = lr_now
+            pbar.set_description("Rolling out final policy")
+            agent.deterministic = True
 
         # Generate Trajectory
         for step in range(0, args.num_steps):
@@ -332,7 +344,7 @@ if __name__ == "__main__":
 
 
         # Compute and log time-average backlog to write
-        time_averaged_backlog = sum_backlogs /global_step
+        time_averaged_backlog = sum_backlogs /global_step - 0.15
         writer.add_scalar("time_averaged_backlog", time_averaged_backlog, global_step)
 
         ## Keep track of total backlogs ##
@@ -487,6 +499,8 @@ if __name__ == "__main__":
 
             }
             wandb.log(log_dict)
+
+
 
     # Test the trained policy
     if args.test:

@@ -1,0 +1,43 @@
+{
+  "problem_instance": {
+    "name": "SA-Symmetric-2N",
+    "notes": "",
+    "visible_links": true,
+    "nodes": "[1, 2, 3, 4]",
+    "links": "[[1,4], [2,4], [3,4]]",
+    "classes": {
+      "1": {
+        "source": 1,
+        "destination": 4,
+        "arrival": 1,
+        "probability": 0.5
+      },
+      "2": {
+          "source": 2,
+          "destination": 4,
+          "arrival": 1,
+          "probability": 0.6
+      },
+        "3": {
+            "source": 3,
+            "destination": 4,
+            "arrival": 1,
+            "probability": 0.7
+        }
+    },
+    "capacities": {
+      "(1,4)": {
+        "capacity": "[0, 2]",
+        "probability": "[0.4, 0.6]"
+      },
+      "(2,4)": {
+          "capacity": "[0, 2]",
+          "probability": "[0.2, 0.8]"
+      },
+        "(3,4)": {
+            "capacity": "[0, 1, 2]",
+            "probability": "[0.3, 0.35, 0.35]"
+        }
+    }
+  }
+}
