@@ -16,7 +16,7 @@ TODO:
 5. Implement other version of Bai's problems with more nodes
 
 """
-config_file = "clean_rl/ServerAllocation/M3/M3A1-O_IA_AR_PPO.yaml"
+config_file = "clean_rl/ServerAllocation/M4/M4A1-O_IA_AR_PPO.yaml"
 #config_file = "clean_rl/MSSA_N2S1_config1.yaml"
 args = clean_rl_ppo_parse_config(config_file)
 env = generate_clean_rl_env(args, env_type= "ServerAllocation", normalize = False)()

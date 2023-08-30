@@ -29,6 +29,7 @@ class bern_rv:
 
     def max(self):
         return self.num
+
 class categorical_rv:
 
     def __init__(self, rng, nums = [0,1], probs = None):
@@ -54,6 +55,7 @@ class ServerAllocation(gym.Env):
         super(ServerAllocation, self).__init__()
         # Seeding
         self.rng, self.rng_seed = gym.utils.seeding.np_random(net_para["seed"])
+        #self.rng = np.random.default_rng()
         # Nodes/Buffers/Queues
         self.nodes = eval(net_para['nodes'])
         self.destination = max(self.nodes)
@@ -68,7 +70,7 @@ class ServerAllocation(gym.Env):
         self.classes, self.destinations = self._extract_classes(net_para['classes'])
         # Spaces
         state_low = np.concatenate((np.zeros(self.n_queues), np.zeros(self.n_queues)))
-        state_high = np.concatenate((1e3 * np.ones(self.n_queues), np.ones(self.n_queues)))
+        state_high = np.concatenate((1e3 * np.ones(self.n_queues), np.array([cap.max() for cap in self.capacities_fcn])))
         self.state_space = gym.spaces.Box(low=state_low, high=state_high, shape=(2 * self.n_queues,), dtype=np.float32)
         if self.obs_links:
             self.observation_space = self.state_space
@@ -146,7 +148,7 @@ class ServerAllocation(gym.Env):
 
     def reset(self, seed = None, options = None):
         super().reset(seed = seed)
-        np.random.seed(seed)
+        #np.random.seed(seed)
         self.buffers = {node: 0 for node in self.nodes if node != self.destination}
         obs = self.get_obs()
         self._sim_capacities()

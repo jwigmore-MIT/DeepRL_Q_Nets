@@ -6,13 +6,16 @@ import torch
 from tqdm import tqdm
 import pickle
 
-config_file = "clean_rl/ServerAllocation/M2/M2A3-O_IA_AR_PPO.yaml"
+config_file = "clean_rl/ServerAllocation/M4/M4A1-O_IA_AR_PPO.yaml"
 args = clean_rl_ppo_parse_config(config_file)
 if args.obs_links:
     run_types = ["DP","MWCQ","LCQ", "RCQ"]#,"RQ"]
+    run_types = ["DP","MWCQ"]
+    run_types = ["MWCQ"]
 
 else:
-    run_types = ["LQ", "RQ", "MRQ"] # RQ
+    #run_types = ["LQ", "RQ", "MRQ"] # RQ
+    run_types = ["MWQ"]
 
 DP_path = "saved_MDPs/M2A3_O_MDP.p"
 mdp = pickle.load(open(DP_path, "rb"))
@@ -39,7 +42,7 @@ for run_type in run_types:
     torch.manual_seed(args.seed)
 
 
-    test_length = int(1e6)
+    test_length = int(5e5)
     wandb_log_interval = 1000
     backlogs = np.zeros(test_length)
     pbar = tqdm(range(int(test_length)))

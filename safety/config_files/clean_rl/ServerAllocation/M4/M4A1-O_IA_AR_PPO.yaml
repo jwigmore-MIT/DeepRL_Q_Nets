@@ -18,7 +18,7 @@ env_json_path: "/JSON/Environment/ServerAllocation/M4A1.json"
 total_timesteps: 3.0e+6
 learning_rate: 3.0e-4
 num_envs: 1
-num_steps: 512
+num_steps: 256
 anneal_lr: false
 gamma: 1.0
 gae_lambda: 0.95
@@ -44,9 +44,9 @@ critic_hidden_dims: [2, 64]
 actor_hidden_dims: [2, 64]
 
 reward_scale: .001
-obs_scale: 50
+obs_scale: 100
 
-int_thresh: 10
+int_thresh: 35
 
 apply_mask: true
 stable_policy: MWCQ
@@ -58,7 +58,7 @@ eval_freq: 100000
 eval_steps: 1.0e+5
 test_steps: 1.0e+5
 
-learning_steps: 5.0e+5
+learning_steps: 3.0e+6
 
 
 
