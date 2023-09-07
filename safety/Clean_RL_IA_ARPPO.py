@@ -192,7 +192,7 @@ def eval_model(agent, args, train_step = 0, test = False, pbar = None):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl\ServerAllocation\M2\M2A3-O_IA_AR_PPO.yaml"
+    config_file = "clean_rl\ServerAllocation\M4\M4A1-O_IA_AR_PPO.yaml"
 
 
     args = parse_args_or_config(config_file)
@@ -344,7 +344,7 @@ if __name__ == "__main__":
 
 
         # Compute and log time-average backlog to write
-        time_averaged_backlog = sum_backlogs /global_step - 0.15
+        time_averaged_backlog = sum_backlogs /global_step
         writer.add_scalar("time_averaged_backlog", time_averaged_backlog, global_step)
 
         ## Keep track of total backlogs ##
