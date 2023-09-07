@@ -1,0 +1,9 @@
+
+
+Q-intervention: Intervene when the Q-value of the stabilizing policy is greater than the Q-value of the the action output by the policy network.
+
+We need advantage targets and value targets...
+
+Advantage targets: Computed from GAE
+
+Value targets: Computed from GAE + V(s_t)
