@@ -98,10 +98,14 @@ class DuelingCriticAgent(nn.Module):
     def __init__(self, envs, shared_critic_dims = [1, 64], separate_critic_dims = [1, 64], actor_dims = [2,64], temperature=1.0, learn_temperature=False, mask_value = -1e8):
         super().__init__()
         self.mask_value = mask_value
-        if learn_temperature:
-            self.temperature = nn.Parameter(torch.ones(1)*temperature)
+        self.learn_temperature = learn_temperature
+        if learn_temperature  == "sigmoid":
+            init_param = -np.log(1/temperature-1)
+            self.temperature_param = nn.Parameter(torch.ones(1)*init_param)
+        elif learn_temperature == "linear":
+            self.temperature_param = nn.Parameter(torch.ones(1)*temperature)
         else:
-            self.temperature = temperature
+            self.temperature_param = temperature
         self.deterministic = False
 
         # Input (and actor) output dim
@@ -168,9 +172,24 @@ class DuelingCriticAgent(nn.Module):
         else:
             return value, advantages
 
+    def get_advantages(self, x, action = None):
+        shared = self.critic_mlp(x)
+        advantages = self.advantage_head(shared)
+        if action is not None:
+            return advantages[:, action]
+        else:
+            return advantages
+
+    def get_temperature(self):
+        if self.learn_temperature == "sigmoid":
+            return torch.nn.functional.sigmoid(self.temperature_param).clamp(min = 0.1)
+        elif self.learn_temperature == "linear":
+            return self.temperature_param.clamp(min = 0.1)
+        else:
+            return torch.exp(self.temperature_param)
     def get_action_and_value(self, x, action=None, mask = None):
 
-        logits = self.actor(x)/self.temperature
+        logits = self.actor(x)/self.get_temperature()
         if mask is not None:
             # convert mask to Tensor and match shape of logits
             if isinstance(mask, torch.Tensor):
@@ -186,6 +205,22 @@ class DuelingCriticAgent(nn.Module):
                 action = probs.sample()
         value, advantage = self.get_value_and_advantages(x, action)
         return action, probs.log_prob(action), probs.entropy(), value, advantage
+
+    def get_action(self,x, mask = None):
+        logits = self.actor(x) / self.get_temperature()
+        if mask is not None:
+            # convert mask to Tensor and match shape of logits
+            if isinstance(mask, torch.Tensor):
+                mask = mask.reshape(logits.shape).bool()
+            else:
+                mask = torch.Tensor(mask).to(logits.device).reshape(logits.shape).bool()
+            logits[mask] = self.mask_value
+        probs = Categorical(logits=logits)
+        if self.deterministic:
+            action = torch.argmax(logits, dim=-1)
+        else:
+            action = probs.sample()
+        return action
 
 
 
@@ -346,7 +381,7 @@ if __name__ == "__main__":
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = args.total_timesteps // args.batch_size
     #pbar = tqdm(range(num_updates), ncols=80, desc="Training Episodes")
-    pbar = tqdm(total = args.total_timesteps, ncols=80, desc="Training Steps")
+    pbar = tqdm(total = args.total_timesteps, ncols=80, desc="Training Steps", dynamic_ncols=True)
 
     # Average Reward Variables
     eta = 0
@@ -376,29 +411,37 @@ if __name__ == "__main__":
             obs[step] = next_obs
             dones[step] = next_done
 
-            if envs.call("get_backlog")[0] > args.int_thresh: #minus one to account for the source packet
-                reward_penalty = - args.intervention_penalty
-                np_action = envs.call("get_stable_action", args.stable_policy)[0]
-                action = torch.Tensor([np_action]).to(device).int()
-                with torch.no_grad():
-                    _, log_prob, _, value, advantage = agent.get_action_and_value(next_obs, action)
-                    values[step] = value.flatten()
-                    advantages[step] = advantage.flatten()
+
+            # Decide whether to use intervention or DNN policy
+            with torch.no_grad():
+                # Intervention Action
+                a_0 = envs.call("get_stable_action", args.stable_policy)[0]
+                # DNN Action
+                if args.apply_mask:
+                    mask = envs.call("get_mask")[0]
+                else: mask = None
+                a_theta = agent.get_action(next_obs, mask = mask)
+                # Get Q-value for each action
+                Q_0 = agent.get_advantages(next_obs, a_0)
+                Q_theta = agent.get_advantages(next_obs, a_theta)
+                # Take action with highest Q-value
+                if Q_0 > Q_theta:
+                    reward_penalty = - args.intervention_penalty
+                    action = torch.Tensor([a_0]).to(device).int()
+                    _, log_prob, _, value, advantage= agent.get_action_and_value(next_obs, action, mask = mask)
                     interventions[step] = torch.Tensor([1]).to(device)
-            else:
-                reward_penalty = 0
-                with torch.no_grad():
-                    if args.apply_mask:
-                        mask = envs.call("get_mask")[0]
-                    else:
-                        mask = None
-                    action, logprob, _, value, advantage = agent.get_action_and_value(next_obs, mask = mask)
-                    values[step] = value.flatten()
-                    advantages[step] = advantage.flatten()
+                else:
+                    reward_penalty =0
+                    action = torch.Tensor([a_theta]).to(device).int()
+                    _, log_prob, _, value, advantage = agent.get_action_and_value(next_obs, action, mask = mask)
                     interventions[step] = torch.Tensor([0]).to(device)
-            actions[step] = action
+                actions[step] = action
+                values[step] = value.flatten()
+                advantages[step] = advantage.flatten()
             if args.apply_mask: masks[step] = torch.Tensor(mask).to(device)
-            logprobs[step] = logprob
+            logprobs[step] = log_prob
+
+
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, terminated, truncated, info = envs.step(action.cpu().numpy())
@@ -476,14 +519,22 @@ if __name__ == "__main__":
                         "mb_adv_mean": [],
                         "mb_adv_std": [],}
             for start in range(0, args.batch_size, args.minibatch_size):
+
                 end = start + args.minibatch_size
+                if end > args.batch_size:
+                    continue
                 mb_inds = b_inds[start:end]
-                mb_interventions = b_inter[mb_inds]
+                if args.on_policy:
+                    mb_interventions = b_inter[mb_inds]
+                else:
+                    mb_interventions = torch.zeros_like(b_inter[mb_inds])
                 _, newlogprob, entropy, newvalue, newadvantage = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds], b_masks[mb_inds])
 
                 logratio = newlogprob - b_logprobs[mb_inds]
-                ratio = logratio.exp()
-
+                ratio = logratio.exp().nan_to_num(posinf = 2)
+                max_update_ratio =  ratio[(1-mb_interventions).abs().bool()].max()
+                if max_update_ratio > 2 and False:
+                    print("ratio too large")
                 with torch.no_grad():
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio*(1-mb_interventions)).mean()
@@ -500,9 +551,9 @@ if __name__ == "__main__":
                     mb_gaes = (mb_gaes - mb_gaes.mean()) / (mb_gaes.std() + 1e-8)
 
                 # Policy loss
-                pg_loss1 = -mb_gaes * ratio * (1-mb_interventions)
-                pg_loss2 = -mb_gaes*(1-mb_interventions) * torch.clamp(ratio*(1-mb_interventions), 1 - args.clip_coef, 1 + args.clip_coef)
-                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+                pg_loss1 = mb_gaes * ratio * (1-mb_interventions)
+                pg_loss2 = mb_gaes*(1-mb_interventions) * torch.clamp(ratio*(1-mb_interventions), 1 - args.clip_coef, 1 + args.clip_coef)
+                pg_loss = -torch.min(pg_loss1, pg_loss2).mean()
 
                 # Value loss
                 newvalue = newvalue.view(-1)
@@ -527,11 +578,19 @@ if __name__ == "__main__":
 
                 entropy_loss = (entropy*(1-mb_interventions)).sum()/torch.clamp((1-mb_interventions).sum(), min = 1)
                 loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef + adv_loss * args.adv_coef
-
+                prior_temperature = agent.get_temperature().item()
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 optimizer.step()
+                if True:
+                    # Add information to pbar
+                    # add a set postfix to pbar
+                    custom_str = f"pg_loss: {pg_loss.item():.02f} max_update_ratio: {max_update_ratio.item():.02f} entropy_loss: {entropy_loss.item():.02f}"
+                    pbar.set_postfix_str(custom_str)
+                    #check if temperature paramter is nan
+                    if torch.isnan(agent.get_temperature()).any():
+                        print("temperature is nan")
 
             if args.target_kl is not None:
                 if approx_kl > args.target_kl:
@@ -543,10 +602,14 @@ if __name__ == "__main__":
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
+
+
+
+            #pbar.set_postfix(f"pg_loss: {pg_loss.item()}, max_update_ratio: {max_update_ratio.item()}, entropy_loss: {entropy_loss.item()}")
         if args.track:
             log_dict = {
                 "update_info/learning_rate": optimizer.param_groups[0]["lr"],
-                "update_info/temperature": agent.temperature if isinstance(agent.temperature, float) else agent.temperature.item(),
+                "update_info/temperature": agent.temperature_param if isinstance(agent.temperature_param, float) else agent.get_temperature().item(),
                 "update_info/entropy_loss": entropy_loss.item(),
                 "update_info/approx_abs_kl": approx_kl.abs().item(),
                 "update_info/clipfrac": np.mean(clipfracs),
@@ -573,6 +636,7 @@ if __name__ == "__main__":
                 "rollout/rewards": np.mean(rewards.cpu().numpy()),
                 "rollout/episode": update,
                 "rollout/intervention_rate": interventions.mean().item(),
+                "rollout/action_probs:": b_logprobs.exp().mean().item(),
                 "update_info/update": update,
                 "global_step": global_step,
 
