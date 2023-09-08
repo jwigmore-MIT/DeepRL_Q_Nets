@@ -305,7 +305,7 @@ def eval_model(agent, args, train_step = 0, test = False, pbar = None):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl\ServerAllocation\M2\M2A3-O_IA_AR_Q_PPO.yaml"
+    config_file = "clean_rl\ServerAllocation\M4\M4A1-O_IA_AR_Q_PPO.yaml"
 
 
     args = parse_args_or_config(config_file)
@@ -403,6 +403,7 @@ if __name__ == "__main__":
             optimizer.param_groups[0]["lr"] = lr_now
             pbar.set_description("Rolling out final policy")
             agent.deterministic = True
+        intervention_threshold = args.int_thresh + global_step * args.int_thresh_slope
 
         # Generate Trajectory
         for step in range(0, args.num_steps):
@@ -414,6 +415,9 @@ if __name__ == "__main__":
 
             # Decide whether to use intervention or DNN policy
             with torch.no_grad():
+                # Intervention Threshold Check
+
+
                 # Intervention Action
                 a_0 = envs.call("get_stable_action", args.stable_policy)[0]
                 # DNN Action
@@ -425,7 +429,7 @@ if __name__ == "__main__":
                 Q_0 = agent.get_advantages(next_obs, a_0)
                 Q_theta = agent.get_advantages(next_obs, a_theta)
                 # Take action with highest Q-value
-                if Q_0 > Q_theta:
+                if Q_0 > Q_theta or envs.get_attr("get_backlog")[0] > intervention_threshold:
                     reward_penalty = - args.intervention_penalty
                     action = torch.Tensor([a_0]).to(device).int()
                     _, log_prob, _, value, advantage= agent.get_action_and_value(next_obs, action, mask = mask)
@@ -451,7 +455,9 @@ if __name__ == "__main__":
             backlogs[step] = info['backlog'][0]
             sum_backlogs += info['backlog'][0]
 
-
+        # increase the intervention threshold based on the number of interventions in the last rollout
+        if args.int_thresh_slope > 0:
+            intervention_threshold += args.int_thresh_slope*interventions[global_step-args.num_steps:global_step].sum().item()
         # Compute and log time-average backlog to write
         time_averaged_backlog = sum_backlogs /global_step - 0.15
         writer.add_scalar("time_averaged_backlog", time_averaged_backlog, global_step)
@@ -528,11 +534,17 @@ if __name__ == "__main__":
                     mb_interventions = b_inter[mb_inds]
                 else:
                     mb_interventions = torch.zeros_like(b_inter[mb_inds])
+
+
                 _, newlogprob, entropy, newvalue, newadvantage = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds], b_masks[mb_inds])
 
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp().nan_to_num(posinf = 2)
-                max_update_ratio =  ratio[(1-mb_interventions).abs().bool()].max()
+                if mb_interventions.bool().all():
+                    # print("All of minibatch is intervention")
+                    max_update_ratio = torch.Tensor([1])
+                else:
+                    max_update_ratio =  ratio[(1-mb_interventions).abs().bool()].max()
                 if max_update_ratio > 2 and False:
                     print("ratio too large")
                 with torch.no_grad():
@@ -636,6 +648,7 @@ if __name__ == "__main__":
                 "rollout/rewards": np.mean(rewards.cpu().numpy()),
                 "rollout/episode": update,
                 "rollout/intervention_rate": interventions.mean().item(),
+                "rollout/intervention_threshold": intervention_threshold,
                 "rollout/action_probs:": b_logprobs.exp().mean().item(),
                 "update_info/update": update,
                 "global_step": global_step,

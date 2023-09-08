@@ -45,12 +45,13 @@ actor_dims: [2, 64]
 reward_scale: .001
 obs_scale: 200
 
-int_thresh: 10
+int_thresh: 50
+int_thresh_slope: 0.00001
 
 apply_mask: true
 stable_policy: MWCQ
 
-on_policy: true
+on_policy: false
 
 window_size: 10000
 
