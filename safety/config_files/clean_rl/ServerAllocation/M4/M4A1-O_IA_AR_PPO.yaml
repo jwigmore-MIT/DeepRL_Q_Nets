@@ -52,6 +52,11 @@ k: 10
 drift_threshold: 0.0
 on_policy: true
 
+stable_rollout: true
+max_stable_rollout: 1000000
+
+
+
 apply_mask: true
 stable_policy: MWCQ
 

@@ -285,7 +285,6 @@ if __name__ == "__main__":
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = args.total_timesteps // args.batch_size
     #pbar = tqdm(range(num_updates), ncols=80, desc="Training Episodes")
-    pbar = tqdm(total = args.total_timesteps, ncols=80, desc="Training Steps")
 
     # Average Reward Variables
     eta = 0
@@ -296,6 +295,54 @@ if __name__ == "__main__":
     last_k = []
     k = args.k
     drift_threshold = args.drift_threshold
+    # rollout the stable policy until reaching steady state
+    if args.stable_rollout:
+        terminate = False
+        max_rollout_steps = args.max_stable_rollout
+        # sr = stable rollout
+        sr_states = np.zeros((max_rollout_steps, args.num_envs) + envs.single_observation_space.shape)
+        sr_actions = np.zeros((max_rollout_steps, args.num_envs) + envs.single_action_space.shape)
+        sr_rewards = np.zeros((max_rollout_steps, args.num_envs))
+        sr_backlogs = np.zeros((max_rollout_steps, args.num_envs))
+        sr_steps = 0
+        sr_pbar = tqdm(total = max_rollout_steps, ncols=80, desc="Stable Rollout")
+        while not terminate:
+            sr_steps+=1
+            if sr_steps > max_rollout_steps:
+                break
+            else:
+                action = envs.call("get_stable_action", args.stable_policy)
+                #torch_action  = torch.Tensor([action]).to(device).int()
+
+                next_obs_array, reward, terminated, truncated, info = envs.step(action)
+
+                sr_states[sr_steps] = next_obs_array
+                sr_actions[sr_steps] = action
+                sr_rewards[sr_steps] = reward
+                sr_backlogs[sr_steps] = info['backlog'].item()
+                # check if steady state is reached
+                if sr_steps > 10000:
+                    if np.mean(sr_backlogs[sr_steps-1000:sr_steps]) == np.mean(sr_backlogs[sr_steps-2000:sr_steps-1000]):
+                        terminate = True
+                if sr_steps % args.num_steps == 0 or terminate:
+                    sr_pbar.set_description(f"Stable Rollout - Step {sr_steps}")
+                    log_dict = {"sr_steps": sr_steps,
+                                "sr_backlog": np.mean(sr_backlogs[sr_steps-100:sr_steps])}
+                    wandb.log(log_dict)
+
+        if True:
+            import matplotlib.pyplot as plt
+            sr_lta_backlogs = np.cumsum(sr_backlogs[:sr_steps])/np.arange(1, sr_steps+1)
+            plt.plot(sr_backlogs[:sr_steps])
+            plt.plot(sr_lta_backlogs)
+            plt.show()
+        max_state = np.max(sr_states, axis=0)
+        # need to get max_states before normalization
+
+
+
+    pbar = tqdm(total = args.total_timesteps, ncols=80, desc="Training Steps")
+
     for update in range(num_updates):
         pbar.update(n = args.num_steps)
         # Cutoff learning based on number of steps
@@ -320,7 +367,7 @@ if __name__ == "__main__":
             observation_checker(next_obs)
             obs[step] = next_obs
             dones[step] = next_done
-            if False: # threshold based intervention
+            if True: # threshold based intervention
                 if envs.call("get_backlog")[0] > args.int_thresh: #minus one to account for the source packet
                     reward_penalty = - args.intervention_penalty
                     np_action = envs.call("get_stable_action", args.stable_policy)[0]
@@ -339,7 +386,7 @@ if __name__ == "__main__":
                         action, logprob, _, value = agent.get_action_and_value(next_obs, mask = mask)
                         values[step] = value.flatten()
                         interventions[step] = torch.Tensor([0]).to(device)
-            if True: #drift based intervention
+            if False: #drift based intervention
                 # take the mean of the difference of the last 10 steps
                 if last_k.__len__()< 2:
                     mean_diff = 0
