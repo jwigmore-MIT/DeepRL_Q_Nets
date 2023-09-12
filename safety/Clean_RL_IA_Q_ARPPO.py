@@ -223,6 +223,137 @@ class DuelingCriticAgent(nn.Module):
         return action
 
 
+class MHDuelingCriticAgent(nn.Module):
+    def __init__(self, envs, shared_critic_dims = [1, 64], separate_critic_dims = [1, 64], actor_dims = [2,64], temperature=1.0, learn_temperature=False, mask_value = -1e8):
+        super().__init__()
+        self.mask_value = mask_value
+        self.learn_temperature = learn_temperature
+        if learn_temperature  == "sigmoid":
+            init_param = -np.log(1/temperature-1)
+            self.temperature_param = nn.Parameter(torch.ones(1)*init_param)
+        elif learn_temperature == "linear":
+            self.temperature_param = nn.Parameter(torch.ones(1)*temperature)
+        else:
+            self.temperature_param = temperature
+        self.deterministic = False
+
+        # Input (and actor) output dim
+        in_dim = np.array(envs.single_observation_space.shape).prod()
+        action_dim = envs.single_action_space.n
+
+
+        # Actor
+        actor_hidden_depth = actor_dims[0]
+        actor_hidden_size = actor_dims[1]
+
+        actor_layers = []
+        for i in range(actor_hidden_depth):
+            actor_layers.append(layer_init(nn.Linear(in_dim, actor_hidden_size)))
+            actor_layers.append(nn.Tanh())
+            in_dim = actor_hidden_size
+        actor_layers.append(layer_init(nn.Linear(in_dim, action_dim), std=0.01))
+        self.actor = nn.Sequential(*actor_layers)
+
+        ## Critic
+        in_dim = np.array(envs.single_observation_space.shape).prod()
+
+        shared_layers = shared_critic_dims[0]
+        shared_hidden_size = shared_critic_dims[1]
+
+        value_layers = separate_critic_dims[0]
+        value_hidden_size = separate_critic_dims[1]
+
+
+        shared_mlp = []
+        for i in range(shared_layers):
+            shared_mlp.append(layer_init(nn.Linear(in_dim, shared_hidden_size)))
+            shared_mlp.append(nn.Tanh())
+            in_dim = shared_hidden_size
+        shared_mlp.append(layer_init(nn.Linear(in_dim, value_hidden_size), std=1.0))
+        shared_mlp.append(nn.Tanh())
+        self.critic_mlp = nn.Sequential(*shared_mlp)
+        advantage_heads = []
+        for h in range(5):
+            advantage_head = []
+            # Advantage Network
+            for i in range(value_layers):
+                advantage_head.append(layer_init(nn.Linear(value_hidden_size, value_hidden_size)))
+                advantage_head.append(nn.Tanh())
+            advantage_head.append(layer_init(nn.Linear(value_hidden_size, action_dim), std=1.0))
+            advantage_heads.append(nn.Sequential(*advantage_head))
+        self.advantage_heads = nn.ModuleList(advantage_heads)
+        # Value Network
+        value_head = []
+        for i in range(value_layers):
+            value_head.append(layer_init(nn.Linear(value_hidden_size, value_hidden_size)))
+            value_head.append(nn.Tanh())
+        value_head.append(layer_init(nn.Linear(value_hidden_size, 1), std=1.0))
+        self.value_head = nn.Sequential(*value_head)
+
+    def get_value(self, x):
+        shared = self.critic_mlp(x)
+        value = self.value_head(shared)
+        return value
+
+    def get_value_and_advantages(self, x, action = None):
+        shared = self.critic_mlp(x)
+        advantages = [advantage_head(shared) for advantage_head in self.advantage_heads]
+        value = self.value_head(shared)
+        if action is not None:
+            return value, advantages[:, action]
+        else:
+            return value, advantages
+
+    def get_advantages(self, x, action = None):
+        shared = self.critic_mlp(x)
+        advantages = torch.cat([advantage_head(shared) for advantage_head in self.advantage_heads])
+
+        if action is not None:
+            return advantages[:, action]
+        else:
+            return advantages
+
+    def get_temperature(self):
+        if self.learn_temperature == "sigmoid":
+            return torch.nn.functional.sigmoid(self.temperature_param).clamp(min = 0.1)
+        elif self.learn_temperature == "linear":
+            return self.temperature_param.clamp(min = 0.1)
+        else:
+            return torch.exp(self.temperature_param)
+    def get_action_and_value(self, x, action=None, mask = None):
+
+        logits = self.actor(x)/self.get_temperature()
+        if mask is not None:
+            # convert mask to Tensor and match shape of logits
+            if isinstance(mask, torch.Tensor):
+                mask = mask.reshape(logits.shape).bool()
+            else:
+                mask = torch.Tensor(mask).to(logits.device).reshape(logits.shape).bool()
+            logits[mask] = self.mask_value
+        probs = Categorical(logits=logits)
+        if action is None:
+            if self.deterministic:
+                action = torch.argmax(logits, dim=-1)
+            else:
+                action = probs.sample()
+        value, advantage = self.get_value_and_advantages(x, action)
+        return action, probs.log_prob(action), probs.entropy(), value, advantage
+
+    def get_action(self,x, mask = None):
+        logits = self.actor(x) / self.get_temperature()
+        if mask is not None:
+            # convert mask to Tensor and match shape of logits
+            if isinstance(mask, torch.Tensor):
+                mask = mask.reshape(logits.shape).bool()
+            else:
+                mask = torch.Tensor(mask).to(logits.device).reshape(logits.shape).bool()
+            logits[mask] = self.mask_value
+        probs = Categorical(logits=logits)
+        if self.deterministic:
+            action = torch.argmax(logits, dim=-1)
+        else:
+            action = probs.sample()
+        return action
 
 
 
@@ -352,7 +483,7 @@ if __name__ == "__main__":
         temperature = 1.0
         learn_temperature = False
 
-    agent = DuelingCriticAgent(envs, shared_critic_dims= args.shared_critic_dims, separate_critic_dims= args.separate_critic_dims,
+    agent = MHDuelingCriticAgent(envs, shared_critic_dims= args.shared_critic_dims, separate_critic_dims= args.separate_critic_dims,
                                actor_dims= args.actor_dims, temperature = args.temperature, learn_temperature=learn_temperature,
                  ).to(device)
 
@@ -404,7 +535,8 @@ if __name__ == "__main__":
             pbar.set_description("Rolling out final policy")
             agent.deterministic = True
         intervention_threshold = args.int_thresh + global_step * args.int_thresh_slope
-
+        Q0s = []
+        Q1s = []
         # Generate Trajectory
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
@@ -428,8 +560,11 @@ if __name__ == "__main__":
                 # Get Q-value for each action
                 Q_0 = agent.get_advantages(next_obs, a_0)
                 Q_theta = agent.get_advantages(next_obs, a_theta)
+
+                #Q0s.append(Q_0.item())
+                #Q1s.append(Q_theta.item())
                 # Take action with highest Q-value
-                if Q_0 > Q_theta or envs.get_attr("get_backlog")[0] > intervention_threshold:
+                if Q_0 + args.int_offset > Q_theta or envs.get_attr("get_backlog")[0] > intervention_threshold:
                     reward_penalty = - args.intervention_penalty
                     action = torch.Tensor([a_0]).to(device).int()
                     _, log_prob, _, value, advantage= agent.get_action_and_value(next_obs, action, mask = mask)
@@ -459,7 +594,7 @@ if __name__ == "__main__":
         if args.int_thresh_slope > 0:
             intervention_threshold += args.int_thresh_slope*interventions[global_step-args.num_steps:global_step].sum().item()
         # Compute and log time-average backlog to write
-        time_averaged_backlog = sum_backlogs /global_step - 0.15
+        time_averaged_backlog = sum_backlogs /global_step
         writer.add_scalar("time_averaged_backlog", time_averaged_backlog, global_step)
 
         ## Keep track of total backlogs ##

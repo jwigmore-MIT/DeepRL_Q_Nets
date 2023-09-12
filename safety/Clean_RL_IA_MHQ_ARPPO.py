@@ -1,23 +1,4 @@
-""" Clean RL Implementation of Intervention Assisted Average Reward PPO
-Difference from ARPPO:
-    1. Before taking a step, checks to see if state is safe
-    2. If state is safe, take step as normal
-    3. If state is unsafe, take step with intervention
-    4. Log whether or not safe was safe
 
-
-"""
-
-"""
-TODO: Test with current implementations of ServerAllocation and ServerAssignment
-1. Check masking functionality
-2. Rerun baselines
-"""
-
-
-
-
-# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppopy
 import argparse
 import os
 import random
@@ -55,7 +36,6 @@ class Agent(nn.Module):
         else:
             self.temperature = temperature
         self.deterministic = False
-
 
 
         # Critic
@@ -113,6 +93,270 @@ class Agent(nn.Module):
             else:
                 action = probs.sample()
         return action, probs.log_prob(action), probs.entropy(), self.critic(x)
+
+class DuelingCriticAgent(nn.Module):
+    def __init__(self, envs, shared_critic_dims = [1, 64], separate_critic_dims = [1, 64], actor_dims = [2,64], temperature=1.0, learn_temperature=False, mask_value = -1e8):
+        super().__init__()
+        self.mask_value = mask_value
+        self.learn_temperature = learn_temperature
+        if learn_temperature  == "sigmoid":
+            init_param = -np.log(1/temperature-1)
+            self.temperature_param = nn.Parameter(torch.ones(1)*init_param)
+        elif learn_temperature == "linear":
+            self.temperature_param = nn.Parameter(torch.ones(1)*temperature)
+        else:
+            self.temperature_param = temperature
+        self.deterministic = False
+
+        # Input (and actor) output dim
+        in_dim = np.array(envs.single_observation_space.shape).prod()
+        action_dim = envs.single_action_space.n
+
+
+        # Actor
+        actor_hidden_depth = actor_dims[0]
+        actor_hidden_size = actor_dims[1]
+
+        actor_layers = []
+        for i in range(actor_hidden_depth):
+            actor_layers.append(layer_init(nn.Linear(in_dim, actor_hidden_size)))
+            actor_layers.append(nn.Tanh())
+            in_dim = actor_hidden_size
+        actor_layers.append(layer_init(nn.Linear(in_dim, action_dim), std=0.01))
+        self.actor = nn.Sequential(*actor_layers)
+
+        ## Critic
+        in_dim = np.array(envs.single_observation_space.shape).prod()
+
+        shared_layers = shared_critic_dims[0]
+        shared_hidden_size = shared_critic_dims[1]
+
+        value_layers = separate_critic_dims[0]
+        value_hidden_size = separate_critic_dims[1]
+
+
+        shared_mlp = []
+        for i in range(shared_layers):
+            shared_mlp.append(layer_init(nn.Linear(in_dim, shared_hidden_size)))
+            shared_mlp.append(nn.Tanh())
+            in_dim = shared_hidden_size
+        shared_mlp.append(layer_init(nn.Linear(in_dim, value_hidden_size), std=1.0))
+        shared_mlp.append(nn.Tanh())
+        self.critic_mlp = nn.Sequential(*shared_mlp)
+        advantage_head = []
+        # Advantage Network
+        for i in range(value_layers):
+            advantage_head.append(layer_init(nn.Linear(value_hidden_size, value_hidden_size)))
+            advantage_head.append(nn.Tanh())
+        advantage_head.append(layer_init(nn.Linear(value_hidden_size, action_dim), std=1.0))
+        self.advantage_head = nn.Sequential(*advantage_head)
+        # Value Network
+        value_head = []
+        for i in range(value_layers):
+            value_head.append(layer_init(nn.Linear(value_hidden_size, value_hidden_size)))
+            value_head.append(nn.Tanh())
+        value_head.append(layer_init(nn.Linear(value_hidden_size, 1), std=1.0))
+        self.value_head = nn.Sequential(*value_head)
+
+    def get_value(self, x):
+        shared = self.critic_mlp(x)
+        value = self.value_head(shared)
+        return value
+
+    def get_value_and_advantages(self, x, action = None):
+        shared = self.critic_mlp(x)
+        advantages = self.advantage_head(shared)
+        value = self.value_head(shared)
+        if action is not None:
+            return value, advantages[:, action]
+        else:
+            return value, advantages
+
+    def get_advantages(self, x, action = None):
+        shared = self.critic_mlp(x)
+        advantages = self.advantage_head(shared)
+        if action is not None:
+            return advantages[:, action]
+        else:
+            return advantages
+
+    def get_temperature(self):
+        if self.learn_temperature == "sigmoid":
+            return torch.nn.functional.sigmoid(self.temperature_param).clamp(min = 0.1)
+        elif self.learn_temperature == "linear":
+            return self.temperature_param.clamp(min = 0.1)
+        else:
+            return torch.exp(self.temperature_param)
+    def get_action_and_value(self, x, action=None, mask = None):
+
+        logits = self.actor(x)/self.get_temperature()
+        if mask is not None:
+            # convert mask to Tensor and match shape of logits
+            if isinstance(mask, torch.Tensor):
+                mask = mask.reshape(logits.shape).bool()
+            else:
+                mask = torch.Tensor(mask).to(logits.device).reshape(logits.shape).bool()
+            logits[mask] = self.mask_value
+        probs = Categorical(logits=logits)
+        if action is None:
+            if self.deterministic:
+                action = torch.argmax(logits, dim=-1)
+            else:
+                action = probs.sample()
+        value, advantage = self.get_value_and_advantages(x, action)
+        return action, probs.log_prob(action), probs.entropy(), value, advantage
+
+    def get_action(self,x, mask = None):
+        logits = self.actor(x) / self.get_temperature()
+        if mask is not None:
+            # convert mask to Tensor and match shape of logits
+            if isinstance(mask, torch.Tensor):
+                mask = mask.reshape(logits.shape).bool()
+            else:
+                mask = torch.Tensor(mask).to(logits.device).reshape(logits.shape).bool()
+            logits[mask] = self.mask_value
+        probs = Categorical(logits=logits)
+        if self.deterministic:
+            action = torch.argmax(logits, dim=-1)
+        else:
+            action = probs.sample()
+        return action
+
+
+class MHDuelingCriticAgent(nn.Module):
+    def __init__(self, envs, shared_critic_dims = [1, 64], separate_critic_dims = [1, 64], advantage_heads = 2, actor_dims = [2,64], temperature=1.0, learn_temperature=False, mask_value = -1e8):
+        super().__init__()
+        self.mask_value = mask_value
+        self.learn_temperature = learn_temperature
+        if learn_temperature  == "sigmoid":
+            init_param = -np.log(1/temperature-1)
+            self.temperature_param = nn.Parameter(torch.ones(1)*init_param)
+        elif learn_temperature == "linear":
+            self.temperature_param = nn.Parameter(torch.ones(1)*temperature)
+        else:
+            self.temperature_param = temperature
+        self.deterministic = False
+
+        # Input (and actor) output dim
+        in_dim = np.array(envs.single_observation_space.shape).prod()
+        action_dim = envs.single_action_space.n
+
+
+        # Actor
+        actor_hidden_depth = actor_dims[0]
+        actor_hidden_size = actor_dims[1]
+
+        actor_layers = []
+        for i in range(actor_hidden_depth):
+            actor_layers.append(layer_init(nn.Linear(in_dim, actor_hidden_size)))
+            actor_layers.append(nn.Tanh())
+            in_dim = actor_hidden_size
+        actor_layers.append(layer_init(nn.Linear(in_dim, action_dim), std=0.01))
+        self.actor = nn.Sequential(*actor_layers)
+
+        ## Critic
+        in_dim = np.array(envs.single_observation_space.shape).prod()
+
+        shared_layers = shared_critic_dims[0]
+        shared_hidden_size = shared_critic_dims[1]
+
+        value_layers = separate_critic_dims[0]
+        value_hidden_size = separate_critic_dims[1]
+
+
+        shared_mlp = []
+        for i in range(shared_layers):
+            shared_mlp.append(layer_init(nn.Linear(in_dim, shared_hidden_size)))
+            shared_mlp.append(nn.Tanh())
+            in_dim = shared_hidden_size
+        shared_mlp.append(layer_init(nn.Linear(in_dim, value_hidden_size), std=1.0))
+        shared_mlp.append(nn.Tanh())
+        self.critic_mlp = nn.Sequential(*shared_mlp)
+        self.advantage_heads = nn.ModuleList()
+        for h in range(advantage_heads):
+            advantage_head = []
+            # Advantage Network
+            for i in range(value_layers):
+                advantage_head.append(layer_init(nn.Linear(value_hidden_size, value_hidden_size)))
+                advantage_head.append(nn.Tanh())
+            advantage_head.append(layer_init(nn.Linear(value_hidden_size, action_dim), std=1.0))
+            self.advantage_heads.append(nn.Sequential(*advantage_head))
+        #self.advantage_heads = nn.ModuleList(advantage_heads)
+        # Value Network
+        value_head = []
+        for i in range(value_layers):
+            value_head.append(layer_init(nn.Linear(value_hidden_size, value_hidden_size)))
+            value_head.append(nn.Tanh())
+        value_head.append(layer_init(nn.Linear(value_hidden_size, 1), std=1.0))
+        self.value_head = nn.Sequential(*value_head)
+
+    def get_value(self, x):
+        shared = self.critic_mlp(x)
+        value = self.value_head(shared)
+        return value
+
+    def get_value_and_advantages(self, x, action = None):
+        shared = self.critic_mlp(x)
+        advantages = torch.cat([advantage_head(shared) for advantage_head in self.advantage_heads])
+        value = self.value_head(shared)
+        if action is not None:
+            return value, advantages[:, action]
+        else:
+            return value, advantages
+
+    def get_advantages(self, x, action = None):
+        shared = self.critic_mlp(x)
+        advantages = torch.cat([advantage_head(shared) for advantage_head in self.advantage_heads])
+
+        if action is not None:
+            return advantages[:, action]
+        else:
+            return advantages
+
+    def get_temperature(self):
+        if self.learn_temperature == "sigmoid":
+            return torch.nn.functional.sigmoid(self.temperature_param).clamp(min = 0.1)
+        elif self.learn_temperature == "linear":
+            return self.temperature_param.clamp(min = 0.1)
+        else:
+            return torch.exp(self.temperature_param)
+    def get_action_and_value(self, x, action=None, mask = None):
+
+        logits = self.actor(x)/self.get_temperature()
+        if mask is not None:
+            # convert mask to Tensor and match shape of logits
+            if isinstance(mask, torch.Tensor):
+                mask = mask.reshape(logits.shape).bool()
+            else:
+                mask = torch.Tensor(mask).to(logits.device).reshape(logits.shape).bool()
+            logits[mask] = self.mask_value
+        probs = Categorical(logits=logits)
+        if action is None:
+            if self.deterministic:
+                action = torch.argmax(logits, dim=-1)
+            else:
+                action = probs.sample()
+        value, advantage = self.get_value_and_advantages(x, action)
+        return action, probs.log_prob(action), probs.entropy(), value, advantage
+
+    def get_action(self,x, mask = None):
+        logits = self.actor(x) / self.get_temperature()
+        if mask is not None:
+            # convert mask to Tensor and match shape of logits
+            if isinstance(mask, torch.Tensor):
+                mask = mask.reshape(logits.shape).bool()
+            else:
+                mask = torch.Tensor(mask).to(logits.device).reshape(logits.shape).bool()
+            logits[mask] = self.mask_value
+        probs = Categorical(logits=logits)
+        if self.deterministic:
+            action = torch.argmax(logits, dim=-1)
+        else:
+            action = probs.sample()
+        return action
+
+
+
 
 def eval_model(agent, args, train_step = 0, test = False, pbar = None):
     if pbar is not None:
@@ -192,7 +436,7 @@ def eval_model(agent, args, train_step = 0, test = False, pbar = None):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl\ServerAllocation\M4\M4A1-O_IA_AR_PPO.yaml"
+    config_file = "clean_rl\ServerAllocation\M4\M4A1-O_IA_AR_MHQ_PPO.yaml"
 
 
     args = parse_args_or_config(config_file)
@@ -231,22 +475,6 @@ if __name__ == "__main__":
     )
 
 
-    if hasattr(args, "critic_hidden_dims") and hasattr(args, "actor_hidden_dims") \
-            and args.critic_hidden_dims is not None and args.actor_hidden_dims is not None:
-        critic_hidden_dims = args.critic_hidden_dims
-        actor_hidden_dims = args.actor_hidden_dims
-        hidden_size = None
-        hidden_depth = None
-    elif hasattr(args, 'hidden_size'):
-        hidden_size = args.hidden_size
-        hidden_depth = args.hidden_depth
-        critic_hidden_dims = None
-        actor_hidden_dims = None
-    else:
-        hidden_size = 64
-        hidden_depth = 2
-        critic_hidden_dims = None
-        actor_hidden_dims = None
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
     if hasattr(args, 'temperature'):
         temperature = args.temperature
@@ -255,9 +483,9 @@ if __name__ == "__main__":
         temperature = 1.0
         learn_temperature = False
 
-    agent = Agent(envs, temperature = args.temperature, learn_temperature=learn_temperature,
-                  hidden_size=hidden_size, hidden_depth = hidden_depth,
-                  actor_hidden_dims=actor_hidden_dims, critic_hidden_dims= critic_hidden_dims).to(device)
+    agent = MHDuelingCriticAgent(envs, shared_critic_dims= args.shared_critic_dims, separate_critic_dims= args.separate_critic_dims, advantage_heads= args.advantage_heads,
+                               actor_dims= args.actor_dims, temperature = args.temperature, learn_temperature=learn_temperature,
+                 ).to(device)
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
@@ -266,15 +494,15 @@ if __name__ == "__main__":
     actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
     masks = torch.zeros((args.num_steps, args.num_envs) + (envs.action_space.nvec[0],)).to(device)
     interventions = torch.zeros((args.num_steps, args.num_envs)).to(device)
+
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    advantages = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
     backlogs = np.zeros((args.num_steps, args.num_envs))
     total_backlogs = np.zeros((args.total_timesteps, args.num_envs))
-    mean_diffs = np.zeros((args.total_timesteps, args.num_envs))
-    last_ks = np.zeros((args.total_timesteps, args.num_envs))
 
     sum_backlogs = 0
     # TRY NOT TO MODIFY: start the game
@@ -285,21 +513,18 @@ if __name__ == "__main__":
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = args.total_timesteps // args.batch_size
     #pbar = tqdm(range(num_updates), ncols=80, desc="Training Episodes")
-    pbar = tqdm(total = args.total_timesteps, ncols=80, desc="Training Steps")
+    pbar = tqdm(total = args.total_timesteps, ncols=80, desc="Training Steps", dynamic_ncols=True)
 
     # Average Reward Variables
     eta = 0
     beta = 0
     elapsed_eval_time = 0
-
-    # Running mean
-    last_k = []
-    k = args.k
-    drift_threshold = args.drift_threshold
     for update in range(num_updates):
         pbar.update(n = args.num_steps)
         # Cutoff learning based on number of steps
-
+        t_interventions = torch.zeros((args.num_steps, args.num_envs)).to(device)
+        a_interventions = torch.zeros((args.num_steps, args.num_envs)).to(device)
+        interventions = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -312,71 +537,76 @@ if __name__ == "__main__":
             optimizer.param_groups[0]["lr"] = lr_now
             pbar.set_description("Rolling out final policy")
             agent.deterministic = True
-        # for debuggin advantage based intervention
-
+        intervention_threshold = args.int_thresh + global_step * args.int_thresh_slope
+        Q0s = []
+        Q1s = []
+        error1s = []
+        error2s = []
         # Generate Trajectory
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
             observation_checker(next_obs)
             obs[step] = next_obs
             dones[step] = next_done
-            if False: # threshold based intervention
-                if envs.call("get_backlog")[0] > args.int_thresh: #minus one to account for the source packet
-                    reward_penalty = - args.intervention_penalty
-                    np_action = envs.call("get_stable_action", args.stable_policy)[0]
-                    action = torch.Tensor([np_action]).to(device).int()
-                    with torch.no_grad():
-                        _, log_prob, _, value = agent.get_action_and_value(next_obs, action)
-                        values[step] = value.flatten()
-                        interventions[step] = torch.Tensor([1]).to(device)
-                else:
+
+
+            # Decide whether to use intervention or DNN policy
+            with torch.no_grad():
+                # Intervention Threshold Check
+
+
+                # Intervention Action
+                a_0 = envs.call("get_stable_action", args.stable_policy)[0]
+                # DNN Action
+                if args.apply_mask:
+                    mask = envs.call("get_mask")[0]
+                else: mask = None
+                a_theta = agent.get_action(next_obs, mask = mask)
+                # Get Q-value for each action
+                if a_0 == a_theta: # if actions are the same, no intervention
                     reward_penalty = 0
-                    with torch.no_grad():
-                        if args.apply_mask:
-                            mask = envs.call("get_mask")[0]
-                        else:
-                            mask = None
-                        action, logprob, _, value = agent.get_action_and_value(next_obs, mask = mask)
-                        values[step] = value.flatten()
-                        interventions[step] = torch.Tensor([0]).to(device)
-            if True: #drift based intervention
-                # take the mean of the difference of the last 10 steps
-                if last_k.__len__()< 2:
-                    mean_diff = 0
+                    action = torch.Tensor([a_theta]).to(device).int()
+                    _, log_prob, _, value, advantage = agent.get_action_and_value(next_obs, action, mask=mask)
+
                 else:
-                    mean_diff = np.mean(np.diff(last_k))
 
+                    Q_0s = agent.get_advantages(next_obs, a_0)
+                    Q_thetas = agent.get_advantages(next_obs, a_theta)
 
-                # if global_step > 10:
-                #     mean_diff = np.diff(total_backlogs[global_step-100:global_step]).mean()
-                # elif global_step <= 1:
-                #     mean_diff = 0
-                # else:
-                #     mean_diff = np.diff(total_backlogs[:global_step+1]).mean()
-                if mean_diff >  drift_threshold: # positive growth on average
-                    reward_penalty = - args.intervention_penalty
-                    np_action = envs.call("get_stable_action", args.stable_policy)[0]
-                    action = torch.Tensor([np_action]).to(device).int()
-                    with torch.no_grad():
-                        _, logprob, _, value = agent.get_action_and_value(next_obs, action)
-                        values[step] = value.flatten()
-                        interventions[step] = torch.Tensor([1]).to(device)
-                else: # negative or even growth on average
-                    reward_penalty = 0
-                    with torch.no_grad():
-                        if args.apply_mask:
-                            mask = envs.call("get_mask")[0]
+                    error1 = Q_0s.std()
+                    error2 = Q_thetas.std()
+                    error1s.append(error1)
+                    error2s.append(error2)
+                    Q0s.append(Q_0s.mean())
+                    Q1s.append(Q_thetas.mean())
+                    Q_0 = Q_0s.mean()
+                    Q_theta = Q_thetas.mean()
+                    # Take action with highest Q-value
+                    #if Q_0 + error1+error2 > Q_theta or envs.get_attr("get_backlog")[0] > intervention_threshold:
+                    if Q_0s.max() > Q_thetas.min() or envs.get_attr("get_backlog")[0] > intervention_threshold:
+                        if envs.get_attr("get_backlog")[0] > intervention_threshold:
+                            t_interventions[step] = torch.Tensor([1]).to(device)
                         else:
-                            mask = None
-                        action, logprob, _, value = agent.get_action_and_value(next_obs, mask=mask)
-                        values[step] = value.flatten()
+                            a_interventions[step] = torch.Tensor([1]).to(device)
+                        reward_penalty = - args.intervention_penalty
+                        action = torch.Tensor([a_0]).to(device).int()
+                        _, log_prob, _, value, advantage= agent.get_action_and_value(next_obs, action, mask = mask)
+                        interventions[step] = torch.Tensor([1]).to(device)
+                    else:
+                        reward_penalty =0
+                        action = torch.Tensor([a_theta]).to(device).int()
+                        _, log_prob, _, value, advantage = agent.get_action_and_value(next_obs, action, mask = mask)
                         interventions[step] = torch.Tensor([0]).to(device)
-                        if args.apply_mask: masks[step] = torch.Tensor(mask).to(device)
+                        t_interventions[step] = torch.Tensor([0]).to(device)
+                        a_interventions[step] = torch.Tensor([0]).to(device)
+                actions[step] = action
+                values[step] = value.flatten()
+                advantages[step] = advantage.mean().flatten()
 
-            actions[step] = action
-            mean_diffs[global_step] = mean_diff
-            last_ks[global_step] = np.mean(last_k)
-            logprobs[step] = logprob
+            if args.apply_mask: masks[step] = torch.Tensor(mask).to(device)
+            logprobs[step] = log_prob
+
+
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, terminated, truncated, info = envs.step(action.cpu().numpy())
@@ -385,23 +615,20 @@ if __name__ == "__main__":
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
             backlogs[step] = info['backlog'][0]
             sum_backlogs += info['backlog'][0]
-            last_k.append(backlogs[step].item())
-            if last_k.__len__() > k:
-                last_k.pop(0)
-            if step % 64 == 0:
-                writer.add_scalar("mean_diff", mean_diff, global_step)
 
+        # increase the intervention threshold based on the number of interventions in the last rollout
+        if args.int_thresh_slope > 0:
+            intervention_threshold += args.int_thresh_slope*interventions[global_step-args.num_steps:global_step].sum().item()
         # Compute and log time-average backlog to write
         time_averaged_backlog = sum_backlogs /global_step
-
         writer.add_scalar("time_averaged_backlog", time_averaged_backlog, global_step)
+
         ## Keep track of total backlogs ##
         total_backlogs[global_step - args.num_steps:global_step] = backlogs
 
         # Compute and log window-average backlog to writer
         if hasattr(args, 'window_size') and global_step > args.window_size:
             window_backlogs = total_backlogs[global_step - args.window_size:global_step]
-
             window_average_backlog = np.mean(window_backlogs)
             writer.add_scalar("window_average_backlog", window_average_backlog, global_step)
         else: window_average_backlog = None
@@ -424,7 +651,7 @@ if __name__ == "__main__":
         # bootstrap value if not done
         with torch.no_grad():
             next_value = agent.get_value(next_obs).reshape(1, -1)
-            advantages = torch.zeros_like(rewards).to(device)
+            gaes = torch.zeros_like(rewards).to(device)
             lastgaelam = 0
             for t in reversed(range(args.num_steps)):
                 if t == args.num_steps - 1:
@@ -434,17 +661,18 @@ if __name__ == "__main__":
                     nextnonterminal = 1.0 - dones[t + 1]
                     nextvalues = values[t + 1]
                 delta = rewards[t] - eta + args.gamma * nextvalues * nextnonterminal - values[t]
-                advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
-            returns = advantages + values
+                gaes[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
+            returns = gaes + values
 
         # flatten the batch
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
         b_logprobs = logprobs.reshape(-1)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
         b_masks = masks.reshape((-1,) + (envs.action_space.nvec[0],))
-        b_advantages = advantages.reshape(-1)
+        b_gaes = gaes.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
+        b_adv = advantages.reshape(-1)
         b_inter = interventions.reshape(-1)
 
         # Optimizing the policy and value network
@@ -453,9 +681,15 @@ if __name__ == "__main__":
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
             # Recording mb_stats
-            mb_stats = {"mb_adv_mean": [], "mb_adv_std": []}
+            mb_stats = {"mb_gae_mean": [],
+                        "mb_gae_std": [],
+                        "mb_adv_mean": [],
+                        "mb_adv_std": [],}
             for start in range(0, args.batch_size, args.minibatch_size):
+
                 end = start + args.minibatch_size
+                if end > args.batch_size:
+                    continue
                 mb_inds = b_inds[start:end]
                 if args.on_policy:
                     mb_interventions = b_inter[mb_inds]
@@ -463,30 +697,40 @@ if __name__ == "__main__":
                     mb_interventions = torch.zeros_like(b_inter[mb_inds])
 
 
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds], b_masks[mb_inds])
+                _, newlogprob, entropy, newvalue, newadvantage = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds], b_masks[mb_inds])
 
                 logratio = newlogprob - b_logprobs[mb_inds]
-                ratio = logratio.exp()
-
+                ratio = logratio.exp().nan_to_num(posinf = 2)
+                if mb_interventions.bool().all():
+                    # print("All of minibatch is intervention")
+                    max_update_ratio = torch.Tensor([1])
+                else:
+                    max_update_ratio =  ratio[(1-mb_interventions).abs().bool()].max()
+                if max_update_ratio > 2 and False:
+                    print("ratio too large")
                 with torch.no_grad():
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio*(1-mb_interventions)).mean()
                     approx_kl = (((ratio - 1) - logratio)*(1-mb_interventions)).mean()
                     clipfracs += [(((ratio - 1.0)*(1-mb_interventions)).abs() > args.clip_coef).float().mean().item()]
 
-                mb_advantages = b_advantages[mb_inds]*(1-mb_interventions)
-                mb_stats["mb_adv_mean"].append(mb_advantages.mean().item())
-                mb_stats["mb_adv_std"].append(mb_advantages.std().item())
-                if args.norm_adv:
-                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+                mb_gaes = b_gaes[mb_inds]*(1-mb_interventions)
+                mb_stats["mb_gae_mean"].append(mb_gaes.mean().item())
+                mb_stats["mb_gae_std"].append(mb_gaes.std().item())
+                mb_stats["mb_adv_mean"].append(newadvantage.mean().item())
+                mb_stats["mb_adv_std"].append(newadvantage.std().item())
+
+                if args.norm_gaes:
+                    mb_gaes = (mb_gaes - mb_gaes.mean()) / (mb_gaes.std() + 1e-8)
 
                 # Policy loss
-                pg_loss1 = -mb_advantages * ratio * (1-mb_interventions)
-                pg_loss2 = -mb_advantages*(1-mb_interventions) * torch.clamp(ratio*(1-mb_interventions), 1 - args.clip_coef, 1 + args.clip_coef)
-                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+                pg_loss1 = mb_gaes * ratio * (1-mb_interventions)
+                pg_loss2 = mb_gaes*(1-mb_interventions) * torch.clamp(ratio*(1-mb_interventions), 1 - args.clip_coef, 1 + args.clip_coef)
+                pg_loss = -torch.min(pg_loss1, pg_loss2).mean()
 
                 # Value loss
                 newvalue = newvalue.view(-1)
+                #newadvantage = newadvantage.view(-1)
                 bias_factor = args.nu*beta
                 if args.clip_vloss:
                     v_loss_unclipped = (newvalue - b_returns[mb_inds] - bias_factor) ** 2
@@ -501,13 +745,25 @@ if __name__ == "__main__":
                 else:
                     v_loss = 0.5 * ((newvalue - b_returns[mb_inds]-bias_factor) ** 2).mean()
 
-                entropy_loss = (entropy*(1-mb_interventions)).sum()/torch.clamp((1-mb_interventions).sum(), min = 1)
-                loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
+                # Advantage Loss
+                all_mb_gaes = b_gaes[mb_inds]
+                adv_loss = 0.5 * ((newadvantage - all_mb_gaes) ** 2).mean()
 
+                entropy_loss = (entropy*(1-mb_interventions)).sum()/torch.clamp((1-mb_interventions).sum(), min = 1)
+                loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef + adv_loss * args.adv_coef
+                prior_temperature = agent.get_temperature().item()
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 optimizer.step()
+                if True:
+                    # Add information to pbar
+                    # add a set postfix to pbar
+                    custom_str = f"pg_loss: {pg_loss.item():.02f} max_update_ratio: {max_update_ratio.item():.02f} entropy_loss: {entropy_loss.item():.02f}"
+                    pbar.set_postfix_str(custom_str)
+                    #check if temperature paramter is nan
+                    if torch.isnan(agent.get_temperature()).any():
+                        print("temperature is nan")
 
             if args.target_kl is not None:
                 if approx_kl > args.target_kl:
@@ -519,10 +775,14 @@ if __name__ == "__main__":
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
+
+
+
+            #pbar.set_postfix(f"pg_loss: {pg_loss.item()}, max_update_ratio: {max_update_ratio.item()}, entropy_loss: {entropy_loss.item()}")
         if args.track:
             log_dict = {
                 "update_info/learning_rate": optimizer.param_groups[0]["lr"],
-                "update_info/temperature": agent.temperature if isinstance(agent.temperature, float) else agent.temperature.item(),
+                "update_info/temperature": agent.temperature_param if isinstance(agent.temperature_param, float) else agent.get_temperature().item(),
                 "update_info/entropy_loss": entropy_loss.item(),
                 "update_info/approx_abs_kl": approx_kl.abs().item(),
                 "update_info/clipfrac": np.mean(clipfracs),
@@ -531,16 +791,23 @@ if __name__ == "__main__":
                 "update_info/abs_pg_loss": pg_loss.abs().item(),
                 "update_info/unclipped_pg_loss": pg_loss1.mean().item(),
                 "update_info/value_loss": v_loss.item(),
+                "update_info/advantage_loss": adv_loss.item(),
                 "update_info/avg_value": b_values.mean().item(),
                 "update_info/critic_error": error.mean(),
-                "update_info/advantages": advantages.mean().item(),
+                "update_info/gaes": gaes.mean().item(),
                 "update_info/explained_variance": explained_var,
                 "update_info/old_approx_kl": old_approx_kl.item(),
-                "update_info/mb_adv_mean": np.mean(mb_stats["mb_adv_mean"]),
-                "update_info/mb_adv_std": np.mean(mb_stats["mb_adv_std"]),
+                "update_info/mb_gae_mean": np.mean(mb_stats["mb_gae_mean"]),
+                "update_info/mb_gae_std": np.mean(mb_stats["mb_gae_std"]),
                 "ARPPO_info/eta": eta,
                 "ARPPO_info/beta": beta,
                 "ARPPO_info/bias_factor": bias_factor,
+                "MHQ_info/Q_0": np.mean(Q0s),
+                "MHQ_info/Q_1": np.mean(Q1s),
+                "MHQ_info/error1": np.mean(error1s),
+                "MHQ_info/error2": np.mean(error2s),
+                "MHQ_info/t_intervention_rate": t_interventions.mean().item(),
+                "MHQ_info/a_intervention_rate": a_interventions.mean().item(),
 
                 "rollout/backlog": np.mean(backlogs[:global_step]),
                 "rollout/time_averaged_backlog": time_averaged_backlog,
@@ -548,8 +815,8 @@ if __name__ == "__main__":
                 "rollout/rewards": np.mean(rewards.cpu().numpy()),
                 "rollout/episode": update,
                 "rollout/intervention_rate": interventions.mean().item(),
-                "rollout/mean_diff": mean_diff,
-                "rollout/last_k_mean": np.mean(last_k),
+                "rollout/intervention_threshold": intervention_threshold,
+                "rollout/action_probs:": b_logprobs.exp().mean().item(),
                 "update_info/update": update,
                 "global_step": global_step,
 

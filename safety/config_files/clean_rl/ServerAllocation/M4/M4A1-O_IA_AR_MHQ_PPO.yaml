@@ -7,9 +7,9 @@ torch_deterministic: true
 cuda: true
 track: true
 test: true
-wandb_project_name: "ServerAllocation_M4A1-O"
+wandb_project_name: "ServerAllocation_M4A1-O-MHQ"
 capture_video: false
-policy_name: "IA-AR-PPO"
+policy_name: "MHQ-IA-AR-PPO"
 save_models: true
 notes: For Clean RL based standard PPO implementation (discounted rewards)
 
@@ -18,42 +18,43 @@ env_json_path: "/JSON/Environment/ServerAllocation/M4A1.json"
 total_timesteps: 3.0e+6
 learning_rate: 3.0e-4
 num_envs: 1
-num_steps: 256
+num_steps: 512
 anneal_lr: false
 gamma: 1.0
 gae_lambda: 0.95
 num_minibatches: 4
 update_epochs: 10
-norm_adv: true
+norm_gaes: true
 clip_coef: 0.2
 clip_vloss: false
-ent_coef: 0.01
+ent_coef: 0.00
 vf_coef: 0.5
+adv_coef: 0.5
 max_grad_norm: 0.5
 target_kl: ~
 alpha: 0.2
 nu: -0.1
 temperature: 0.3
-learn_temperature: true
+learn_temperature: linear
 intervention_penalty: 0.00
 
-hidden_size: ~
-hidden_depth: ~
-
-critic_hidden_dims: [2, 64]
-actor_hidden_dims: [2, 64]
+shared_critic_dims: [1, 64]
+separate_critic_dims: [1, 64]
+actor_dims: [2, 64]
+advantage_heads: 4
 
 reward_scale: .001
 obs_scale: 200
 
-int_thresh: 35
+int_offset: 0.00
+int_thresh: 100
+int_thresh_slope: 0.00001
 
-k: 10
-drift_threshold: 0.0
-on_policy: true
 
 apply_mask: true
 stable_policy: MWCQ
+
+on_policy: true
 
 window_size: 10000
 
@@ -62,7 +63,8 @@ eval_freq: 100000
 eval_steps: 1.0e+5
 test_steps: 1.0e+5
 
-learning_steps: 3.0e+6
+learning_steps: 5.0e+5
+
 
 
 

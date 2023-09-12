@@ -43,15 +43,16 @@ separate_critic_dims: [1, 64]
 actor_dims: [2, 64]
 
 reward_scale: .001
-obs_scale: 200
+obs_scale: 100
 
+int_offset: 0.00
 int_thresh: 50
 int_thresh_slope: 0.00001
 
 apply_mask: true
 stable_policy: MWCQ
 
-on_policy: false
+on_policy: true
 
 window_size: 10000
 
