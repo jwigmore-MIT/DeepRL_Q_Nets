@@ -193,7 +193,7 @@ def eval_model(agent, args, train_step = 0, test = False, pbar = None):
 
 
 if __name__ == "__main__":
-    config_file = "clean_rl\ServerAllocation\M4\M4A1-O_IA_AR_PPO.yaml"
+    config_file = os.path.relpath("clean_rl/ServerAllocation/M4/M4A1-O_IA_AR_PPO.yaml")
 
 
     args = parse_args_or_config(config_file)
@@ -340,13 +340,13 @@ if __name__ == "__main__":
             plt.show()
         max_state = np.max(sr_states, axis=0)
         max_buffer_state = max_state[:,:envs.envs[0].unwrapped.n_queues]
-        mean_state = np.mean(sr_states[-1000:])
+        mean_state = np.mean(sr_states[sr_steps-1000:sr_steps], axis=0)
         mean_buffer_state = mean_state[:,:envs.envs[0].unwrapped.n_queues]
+        substate_threshold = mean_buffer_state
         # need to get max_states before normalization
         # Apply normalization based on max_state
 
         buffer_norm_factor = max_buffer_state.sum()*1.5
-        buffer_norm_factor = mean_buffer_state
         envs.envs[0] = apply_obs_wrapper(envs.envs[0], args, buffer_norm_factor)
         envs.envs[0] = apply_reward_wrapper(envs.envs[0], args)
         # take one more step to get normalized next_obs information
@@ -387,7 +387,7 @@ if __name__ == "__main__":
                     np_action = envs.call("get_stable_action", args.stable_policy)[0]
                     action = torch.Tensor([np_action]).to(device).int()
                     with torch.no_grad():
-                        _, log_prob, _, value = agent.get_action_and_value(next_obs, action)
+                        _, logprob, _, value = agent.get_action_and_value(next_obs, action)
                         values[step] = value.flatten()
                         interventions[step] = torch.Tensor([1]).to(device)
                 else:
@@ -401,12 +401,12 @@ if __name__ == "__main__":
                         values[step] = value.flatten()
                         interventions[step] = torch.Tensor([0]).to(device)
             elif True: # max_state based intervention
-                if (envs.call("get_buffers") > max_buffer_state).any():
+                if (envs.call("get_buffers") > substate_threshold).any():
                     reward_penalty = - args.intervention_penalty
                     np_action = envs.call("get_stable_action", args.stable_policy)[0]
                     action = torch.Tensor([np_action]).to(device).int()
                     with torch.no_grad():
-                        _, log_prob, _, value = agent.get_action_and_value(next_obs, action)
+                        _, logprob, _, value = agent.get_action_and_value(next_obs, action)
                         values[step] = value.flatten()
                         interventions[step] = torch.Tensor([1]).to(device)
                 else:
