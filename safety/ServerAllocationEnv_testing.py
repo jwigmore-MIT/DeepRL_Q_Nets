@@ -5,6 +5,7 @@ from Environments.ServerAllocation import ServerAllocationMDP
 from tqdm import tqdm
 import random
 import pickle
+import matplotlib.pyplot as plt
 """
 TODO:
 1. Implement and test optimal policy for ConnectedServerAllocation Problem
@@ -16,7 +17,7 @@ TODO:
 5. Implement other version of Bai's problems with more nodes
 
 """
-config_file = "clean_rl/ServerAllocation/M4/M4A1-O_IA_AR_PPO.yaml"
+config_file = "clean_rl/ServerAllocation/M6/M6A1-O_IA_AR_PPO.yaml"
 #config_file = "clean_rl/MSSA_N2S1_config1.yaml"
 args = clean_rl_ppo_parse_config(config_file)
 env = generate_clean_rl_env(args, env_type= "ServerAllocation", normalize = False)()
@@ -43,10 +44,11 @@ cap = 0
 delivered = 0
 rewards = 0
 backlogs = 0
-test_length = 10000
+test_length = 100000
 pbar = tqdm(range(int(test_length)))
 actions = np.zeros(test_length)
 observations = np.zeros((test_length, env.observation_space.shape[0]))
+v_backlogs = np.zeros(test_length)
 masks = np.zeros((test_length, env.get_mask().shape[0]))
 
 
@@ -102,9 +104,10 @@ for t in pbar:
     masks[t] = mask
     rewards+=step[1]
     backlogs += step[4]['backlog']
+    v_backlogs[t] = step[4]['backlog']
 
 average_reward = np.sum(rewards)/test_length
-lta_average_rewards = np.cumsum(rewards)/np.arange(1, test_length+1)
+lta_average_backlog = np.cumsum(v_backlogs)/np.arange(1, test_length+1)
 average_backlog = np.sum(backlogs)/test_length
 average_arrivals = arrivals/test_length
 average_sum_arrivals = np.sum(arrivals)/test_length
@@ -112,6 +115,8 @@ average_reliability = cap/test_length
 action_dist = np.bincount(actions.astype(int))/test_length
 mode_action = np.argmax(np.bincount(actions.astype(int)))
 
+plt.plot(lta_average_backlog)
+plt.show()
 
 
 

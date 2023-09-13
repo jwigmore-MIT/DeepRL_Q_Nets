@@ -51,7 +51,16 @@ class Agent(nn.Module):
     def __init__(self, envs, temperature=1.0, learn_temperature=False, hidden_size=64, hidden_depth=2, actor_hidden_dims = None, critic_hidden_dims = None, mask_value = -1e8):
         super().__init__()
         self.mask_value = mask_value
-        if learn_temperature:
+        self.learn_temperature = learn_temperature
+        if learn_temperature == "DNN":
+            # state based temperature learning
+            self.temperature = nn.Sequential(
+                layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
+                nn.Sigmoid(),
+                layer_init(nn.Linear(64, 1), std=1.0, bias_const=temperature),
+                nn.Sigmoid(),
+            )
+        elif learn_temperature:
             self.temperature = nn.Parameter(torch.ones(1)*temperature)
         else:
             self.temperature = temperature
@@ -93,13 +102,19 @@ class Agent(nn.Module):
         self.actor = nn.Sequential(*actor_layers)
 
 
-
+    def get_temperature(self, x):
+        if self.learn_temperature == "DNN":
+            return self.temperature(x).clamp(0.1, 10.0)
+        elif self.learn_temperature:
+            return self.temperature.clamp(0.1, 10.0)
+        else:
+            return self.temperature
     def get_value(self, x):
         return self.critic(x)
 
     def get_action_and_value(self, x, action=None, mask = None):
 
-        logits = self.actor(x)/self.temperature
+        logits = self.actor(x)/self.get_temperature(x)
         if mask is not None:
             # convert mask to Tensor and match shape of logits
             if isinstance(mask, torch.Tensor):
@@ -374,7 +389,7 @@ if __name__ == "__main__":
             pbar.set_description("Rolling out final policy")
             agent.deterministic = True
         # for debuggin advantage based intervention
-
+        temperatures = np.zeros(args.num_steps)
         # Generate Trajectory
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
@@ -456,6 +471,7 @@ if __name__ == "__main__":
                 mean_diffs[global_step] = mean_diff
                 last_k.append(backlogs[step].item())
 
+            temperatures[step] = agent.get_temperature(next_obs)
             actions[step] = action
             last_ks[global_step] = np.mean(last_k)
             logprobs[step] = logprob
@@ -543,28 +559,32 @@ if __name__ == "__main__":
                 else:
                     mb_interventions = torch.zeros_like(b_inter[mb_inds])
 
+                mb_non_interventions = (1-mb_interventions).sum()
+                if mb_non_interventions > 0:
+                    pg_inds = (1-mb_interventions).bool()
+                    _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds], b_masks[mb_inds])
 
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds], b_masks[mb_inds])
+                    logratio = newlogprob - b_logprobs[mb_inds]
+                    ratio = logratio.exp()
 
-                logratio = newlogprob - b_logprobs[mb_inds]
-                ratio = logratio.exp()
+                    with torch.no_grad():
+                        # calculate approx_kl http://joschu.net/blog/kl-approx.html
+                        old_approx_kl = (-logratio[(1-mb_interventions).bool()]).mean()
+                        approx_kl = (((ratio - 1) - logratio)[(1-mb_interventions).bool()]).mean()
+                        clipfracs += [(((ratio - 1.0)[(1-mb_interventions).bool()]).abs() > args.clip_coef).float().mean().item()]
 
-                with torch.no_grad():
-                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                    old_approx_kl = (-logratio*(1-mb_interventions)).mean()
-                    approx_kl = (((ratio - 1) - logratio)*(1-mb_interventions)).mean()
-                    clipfracs += [(((ratio - 1.0)*(1-mb_interventions)).abs() > args.clip_coef).float().mean().item()]
+                    mb_advantages = b_advantages[mb_inds][]
+                    mb_stats["mb_adv_mean"].append(mb_advantages.mean().item())
+                    mb_stats["mb_adv_std"].append(mb_advantages.std().item())
+                    if args.norm_adv:
+                        mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
-                mb_advantages = b_advantages[mb_inds]*(1-mb_interventions)
-                mb_stats["mb_adv_mean"].append(mb_advantages.mean().item())
-                mb_stats["mb_adv_std"].append(mb_advantages.std().item())
-                if args.norm_adv:
-                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
-
-                # Policy loss
-                pg_loss1 = -mb_advantages * ratio * (1-mb_interventions)
-                pg_loss2 = -mb_advantages*(1-mb_interventions) * torch.clamp(ratio*(1-mb_interventions), 1 - args.clip_coef, 1 + args.clip_coef)
-                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+                    # Policy loss
+                    pg_loss1 = -mb_advantages * ratio * (1-mb_interventions)
+                    pg_loss2 = -mb_advantages*(1-mb_interventions) * torch.clamp(ratio*(1-mb_interventions), 1 - args.clip_coef, 1 + args.clip_coef)
+                    pg_loss = torch.max(pg_loss1, pg_loss2).sum()/(1-mb_interventions).sum().clamp(min = 1)
+                else:
+                    pg_loss1 = pg_loss2 = pg_loss = entropy = torch.tensor(0.0)
 
                 # Value loss
                 newvalue = newvalue.view(-1)
@@ -603,7 +623,7 @@ if __name__ == "__main__":
         if args.track:
             log_dict = {
                 "update_info/learning_rate": optimizer.param_groups[0]["lr"],
-                "update_info/temperature": agent.temperature if isinstance(agent.temperature, float) else agent.temperature.item(),
+                "update_info/temperature": temperatures.mean(),
                 "update_info/entropy_loss": entropy_loss.item(),
                 "update_info/approx_abs_kl": approx_kl.abs().item(),
                 "update_info/clipfrac": np.mean(clipfracs),
