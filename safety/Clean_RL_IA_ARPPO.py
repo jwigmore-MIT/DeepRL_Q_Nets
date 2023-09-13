@@ -357,7 +357,7 @@ if __name__ == "__main__":
         max_buffer_state = max_state[:,:envs.envs[0].unwrapped.n_queues]
         mean_state = np.mean(sr_states[sr_steps-1000:sr_steps], axis=0)
         mean_buffer_state = mean_state[:,:envs.envs[0].unwrapped.n_queues]
-        substate_threshold = mean_buffer_state
+        substate_threshold = max_buffer_state
         # need to get max_states before normalization
         # Apply normalization based on max_state
 
@@ -569,22 +569,36 @@ if __name__ == "__main__":
 
                     with torch.no_grad():
                         # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                        old_approx_kl = (-logratio[(1-mb_interventions).bool()]).mean()
-                        approx_kl = (((ratio - 1) - logratio)[(1-mb_interventions).bool()]).mean()
-                        clipfracs += [(((ratio - 1.0)[(1-mb_interventions).bool()]).abs() > args.clip_coef).float().mean().item()]
+                        old_approx_kl = (-logratio[pg_inds]).mean()
+                        approx_kl = (((ratio - 1) - logratio)[pg_inds]).mean()
+                        clipfracs += [(((ratio - 1.0)[pg_inds]).abs() > args.clip_coef).float().mean().item()]
 
-                    mb_advantages = b_advantages[mb_inds][]
+                    mb_advantages = b_advantages[mb_inds]
                     mb_stats["mb_adv_mean"].append(mb_advantages.mean().item())
                     mb_stats["mb_adv_std"].append(mb_advantages.std().item())
                     if args.norm_adv:
                         mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
                     # Policy loss
-                    pg_loss1 = -mb_advantages * ratio * (1-mb_interventions)
-                    pg_loss2 = -mb_advantages*(1-mb_interventions) * torch.clamp(ratio*(1-mb_interventions), 1 - args.clip_coef, 1 + args.clip_coef)
-                    pg_loss = torch.max(pg_loss1, pg_loss2).sum()/(1-mb_interventions).sum().clamp(min = 1)
+                    pg_loss1 = -(mb_advantages * ratio)[pg_inds]
+                    pg_loss2 = -(mb_advantages* torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef))[pg_inds]
+                    pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+                    entropy_loss = entropy[pg_inds].mean()
+
+
                 else:
-                    pg_loss1 = pg_loss2 = pg_loss = entropy = torch.tensor(0.0)
+                    pg_loss = entropy_loss = torch.zeros(1).to(device)
+                    pg_loss1 = pg_loss2 = entropy = torch.empty(0)
+                    old_approx_kl = approx_kl = torch.zeros(1).to(device)
+                    clip_fracs = np.zeros(1).mean()
+                    # still need new_value for value losses
+                    _, _, _, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds], b_masks[mb_inds])
+                    mb_advantages = b_advantages[mb_inds]
+                    mb_stats["mb_adv_mean"].append(mb_advantages.mean().item())
+                    mb_stats["mb_adv_std"].append(mb_advantages.std().item())
+                    if args.norm_adv:
+                        mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+
 
                 # Value loss
                 newvalue = newvalue.view(-1)
@@ -602,7 +616,6 @@ if __name__ == "__main__":
                 else:
                     v_loss = 0.5 * ((newvalue - b_returns[mb_inds]-bias_factor) ** 2).mean()
 
-                entropy_loss = (entropy*(1-mb_interventions)).sum()/torch.clamp((1-mb_interventions).sum(), min = 1)
                 loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
 
                 optimizer.zero_grad()
@@ -624,7 +637,7 @@ if __name__ == "__main__":
             log_dict = {
                 "update_info/learning_rate": optimizer.param_groups[0]["lr"],
                 "update_info/temperature": temperatures.mean(),
-                "update_info/entropy_loss": entropy_loss.item(),
+                "update_info/entropy_loss": entropy.mean().item(),
                 "update_info/approx_abs_kl": approx_kl.abs().item(),
                 "update_info/clipfrac": np.mean(clipfracs),
                 "update_info/loss": loss.item(),
