@@ -31,12 +31,13 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
-
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 # my imports
 
 from safety.utils import clean_rl_ppo_parse_config
 from tqdm import tqdm
-from safety.clean_rl_utils import observation_checker, parse_args_or_config, generate_clean_rl_env
+from safety.clean_rl_utils import observation_checker, parse_args_or_config, generate_clean_rl_env, apply_obs_wrapper, apply_reward_wrapper
 
 
 
@@ -227,7 +228,7 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [generate_clean_rl_env(args) for i in range(args.num_envs)]
+        [generate_clean_rl_env(args, normalize= False) for i in range(args.num_envs)]
     )
 
 
@@ -297,6 +298,7 @@ if __name__ == "__main__":
     drift_threshold = args.drift_threshold
     # rollout the stable policy until reaching steady state
     if args.stable_rollout:
+
         terminate = False
         max_rollout_steps = args.max_stable_rollout
         # sr = stable rollout
@@ -337,9 +339,17 @@ if __name__ == "__main__":
             plt.plot(sr_lta_backlogs)
             plt.show()
         max_state = np.max(sr_states, axis=0)
+        max_buffer_state = max_state[:,:envs.envs[0].unwrapped.n_queues]
         # need to get max_states before normalization
-
-
+        # Apply normalization based on max_state
+        buffer_norm_factor = max_buffer_state.sum()*1.5
+        envs.envs[0] = apply_obs_wrapper(envs.envs[0], args, buffer_norm_factor)
+        envs.envs[0] = apply_reward_wrapper(envs.envs[0], args)
+        # take one more step to get normalized next_obs information
+        action = envs.call("get_stable_action", args.stable_policy)
+        # torch_action  = torch.Tensor([action]).to(device).int()
+        next_obs_array, reward, terminated, truncated, info = envs.step(action)
+        next_obs = torch.Tensor(next_obs_array).to(device)
 
     pbar = tqdm(total = args.total_timesteps, ncols=80, desc="Training Steps")
 
@@ -367,8 +377,8 @@ if __name__ == "__main__":
             observation_checker(next_obs)
             obs[step] = next_obs
             dones[step] = next_done
-            if True: # threshold based intervention
-                if envs.call("get_backlog")[0] > args.int_thresh: #minus one to account for the source packet
+            if False: # threshold based intervention
+                if envs.call("get_backlog")[0] > args.int_thresh:
                     reward_penalty = - args.intervention_penalty
                     np_action = envs.call("get_stable_action", args.stable_policy)[0]
                     action = torch.Tensor([np_action]).to(device).int()
@@ -386,7 +396,27 @@ if __name__ == "__main__":
                         action, logprob, _, value = agent.get_action_and_value(next_obs, mask = mask)
                         values[step] = value.flatten()
                         interventions[step] = torch.Tensor([0]).to(device)
-            if False: #drift based intervention
+            elif True: # max_state based intervention
+                if (envs.call("get_buffers") > max_buffer_state).any():
+                    reward_penalty = - args.intervention_penalty
+                    np_action = envs.call("get_stable_action", args.stable_policy)[0]
+                    action = torch.Tensor([np_action]).to(device).int()
+                    with torch.no_grad():
+                        _, log_prob, _, value = agent.get_action_and_value(next_obs, action)
+                        values[step] = value.flatten()
+                        interventions[step] = torch.Tensor([1]).to(device)
+                else:
+                    reward_penalty = 0
+                    with torch.no_grad():
+                        if args.apply_mask:
+                            mask = envs.call("get_mask")[0]
+                        else:
+                            mask = None
+                        action, logprob, _, value = agent.get_action_and_value(next_obs, mask=mask)
+                        values[step] = value.flatten()
+                        interventions[step] = torch.Tensor([0]).to(device)
+            #minus one to account for the source packet
+            elif False: #drift based intervention
                 # take the mean of the difference of the last 10 steps
                 if last_k.__len__()< 2:
                     mean_diff = 0
@@ -419,9 +449,10 @@ if __name__ == "__main__":
                         values[step] = value.flatten()
                         interventions[step] = torch.Tensor([0]).to(device)
                         if args.apply_mask: masks[step] = torch.Tensor(mask).to(device)
+                mean_diffs[global_step] = mean_diff
+                last_k.append(backlogs[step].item())
 
             actions[step] = action
-            mean_diffs[global_step] = mean_diff
             last_ks[global_step] = np.mean(last_k)
             logprobs[step] = logprob
 
@@ -432,11 +463,10 @@ if __name__ == "__main__":
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
             backlogs[step] = info['backlog'][0]
             sum_backlogs += info['backlog'][0]
-            last_k.append(backlogs[step].item())
-            if last_k.__len__() > k:
-                last_k.pop(0)
-            if step % 64 == 0:
-                writer.add_scalar("mean_diff", mean_diff, global_step)
+            # if last_k.__len__() > k:
+            #     last_k.pop(0)
+            # if step % 64 == 0:
+            #     writer.add_scalar("mean_diff", mean_diff, global_step)
 
         # Compute and log time-average backlog to write
         time_averaged_backlog = sum_backlogs /global_step
@@ -595,8 +625,8 @@ if __name__ == "__main__":
                 "rollout/rewards": np.mean(rewards.cpu().numpy()),
                 "rollout/episode": update,
                 "rollout/intervention_rate": interventions.mean().item(),
-                "rollout/mean_diff": mean_diff,
-                "rollout/last_k_mean": np.mean(last_k),
+                # "rollout/mean_diff": mean_diff,
+                # "rollout/last_k_mean": np.mean(last_k),
                 "update_info/update": update,
                 "global_step": global_step,
 

@@ -192,22 +192,37 @@ def generate_clean_rl_env(config, env_type = "ServerAssigment",normalize = True,
             env = ServerAllocation(env_para)
         if normalize:
             # check to make sure obs_scale is greater than 1
-            if config.obs_scale < 1:
-                raise ValueError("config.obs_scale must be greater than 1")
-            if env_type == "ServerAllocation" and env.obs_links:
-                # scale the first half of the observation vector by obsscale
-                # scale the second half of the observation vector by 1/obsscale
-                n_queues = env.n_queues
-                link_obs_scale = np.max(env.observation_space.high[n_queues:])+1
-                env.buffer_obs_scale = config.obs_scale
-                env.link_obs_scale = link_obs_scale
-                env = gym.wrappers.TransformObservation(env, lambda x: np.concatenate((2*x[:n_queues]/config.obs_scale-1, 2*x[n_queues:]/link_obs_scale-1)))
-            else:
-                env = gym.wrappers.TransformObservation(env, lambda x: 2 * x / config.obs_scale - 1)
-
+            env = apply_obs_wrapper(env, config)
             env = gym.wrappers.TransformReward(env, lambda x: x*config.reward_scale)
         return env
     return thunk
+
+def apply_obs_wrapper(env, config, buffer_obs_scale = None):
+    if config.obs_scale < 1:
+        raise ValueError("config.obs_scale must be greater than 1")
+    if config.env_type == "ServerAllocation" and env.obs_links:
+        # scale the first half of the observation vector by obsscale
+        # scale the second half of the observation vector by 1/obsscale
+        n_queues = env.n_queues
+        link_obs_scale = np.max(env.observation_space.high[n_queues:]) + 1
+        if buffer_obs_scale is None:
+            env.buffer_obs_scale = config.obs_scale
+        else:
+            env.buffer_obs_scale = buffer_obs_scale
+        env.link_obs_scale = link_obs_scale
+        env = gym.wrappers.TransformObservation(env, lambda x: np.concatenate(
+            (2 * x[:n_queues] / config.obs_scale - 1, 2 * x[n_queues:] / link_obs_scale - 1)))
+    else:
+        env = gym.wrappers.TransformObservation(env, lambda x: 2 * x / config.obs_scale - 1)
+    return env
+
+def apply_reward_wrapper(env, config, reward_scale = None):
+    if reward_scale is None:
+        reward_scale = config.reward_scale
+
+    env = gym.wrappers.TransformReward(env, lambda x: x * reward_scale)
+    return env
+
 
 def parse_env_json(json_path, config_args = None):
     import json

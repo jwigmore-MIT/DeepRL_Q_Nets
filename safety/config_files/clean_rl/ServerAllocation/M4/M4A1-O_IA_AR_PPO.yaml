@@ -7,7 +7,7 @@ torch_deterministic: true
 cuda: true
 track: true
 test: true
-wandb_project_name: "ServerAllocation_M4A1-O"
+wandb_project_name: "ServerAllocation_M4A1-O-B"
 capture_video: false
 policy_name: "IA-AR-PPO"
 save_models: true
@@ -45,6 +45,7 @@ actor_hidden_dims: [2, 64]
 
 reward_scale: .001
 obs_scale: 200
+
 
 int_thresh: 35
 
