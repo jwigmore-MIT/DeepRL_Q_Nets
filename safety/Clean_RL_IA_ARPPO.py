@@ -340,9 +340,13 @@ if __name__ == "__main__":
             plt.show()
         max_state = np.max(sr_states, axis=0)
         max_buffer_state = max_state[:,:envs.envs[0].unwrapped.n_queues]
+        mean_state = np.mean(sr_states[-1000:])
+        mean_buffer_state = mean_state[:,:envs.envs[0].unwrapped.n_queues]
         # need to get max_states before normalization
         # Apply normalization based on max_state
+
         buffer_norm_factor = max_buffer_state.sum()*1.5
+        buffer_norm_factor = mean_buffer_state
         envs.envs[0] = apply_obs_wrapper(envs.envs[0], args, buffer_norm_factor)
         envs.envs[0] = apply_reward_wrapper(envs.envs[0], args)
         # take one more step to get normalized next_obs information
