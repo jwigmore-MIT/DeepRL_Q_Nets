@@ -582,7 +582,7 @@ if __name__ == "__main__":
                     # Policy loss
                     pg_loss1 = -(mb_advantages * ratio)[pg_inds]
                     pg_loss2 = -(mb_advantages* torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef))[pg_inds]
-                    pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+                    pg_loss = torch.max(pg_loss1, pg_loss2).mean()*(1-mb_interventions).float().mean()
                     entropy_loss = entropy[pg_inds].mean()
 
 
