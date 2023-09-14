@@ -383,15 +383,21 @@ if __name__ == "__main__":
                 print(f"Mean backlog: {np.mean(sr_backlogs[sr_steps-1000:sr_steps])}")
                 print(f"Intervention threshold coefficient: {args.intervention_threshold_coef}")
                 print(f"Backlog threshold: {backlog_threshold}")
-
+        median_state = np.median(sr_states[sr_steps-1000:sr_steps], axis=0)
 
 
         # need to get max_states before normalization
         # Apply normalization based on max_state
 
-        buffer_norm_factor = max_buffer_state.sum()*1.5
-        envs.envs[0] = apply_obs_wrapper(envs.envs[0], args, buffer_norm_factor)
+        buffer_norm_factor = max_buffer_state*3
+        link_norm_factor = max_state[:,envs.envs[0].unwrapped.n_queues:]
         envs.envs[0] = apply_reward_wrapper(envs.envs[0], args)
+        envs.envs[0] = apply_obs_wrapper(envs.envs[0], args, buffer_norm_factor.reshape(-1))
+        median_norm_state = torch.Tensor(envs.envs[0].observation(median_state.reshape(-1)))
+        old_state = envs.call("get_obs")
+        envs.call("set_state", median_state.reshape(-1))
+        median_mask = envs.call("get_mask")[0]
+        envs.call("set_state", old_state[0])
         # take one more step to get normalized next_obs information
         action = envs.call("get_stable_action", args.stable_policy)
         # torch_action  = torch.Tensor([action]).to(device).int()
@@ -403,6 +409,7 @@ if __name__ == "__main__":
             backlog_threshold = args.fixed_backlog_threshold
         elif args.intervention_type == "substate":
             substate_threshold = args.fixed_substate_threshold
+        median_buffer_state = None
 
     pbar = tqdm(total = args.total_timesteps, ncols=80, desc="Training Steps", position=0, leave=True)
 
@@ -676,7 +683,8 @@ if __name__ == "__main__":
             error = np.abs(y_pred - y_true)
             var_y = np.var(y_true)
             explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
-
+            if median_norm_state is not None:
+                action, med_log_prob, med_entropy, med_value = agent.get_action_and_value(torch.Tensor(median_norm_state), None, median_mask)
             # TRY NOT TO MODIFY: record rewards for plotting purposes
             if args.track:
                 log_dict = {
@@ -713,6 +721,10 @@ if __name__ == "__main__":
                     "global_step": global_step,
 
                 }
+                if median_norm_state is not None:
+                    log_dict["median_state/entropy"] = med_entropy.mean().item()
+                    log_dict["median_state/value"] = med_value.mean().item()
+                    log_dict["median_state/log_prob"] = med_log_prob.mean().item()
                 wandb.log(log_dict)
                 if args.target_kl is not None:
                     if approx_kl > args.target_kl:

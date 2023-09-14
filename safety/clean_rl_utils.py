@@ -197,21 +197,23 @@ def generate_clean_rl_env(config, env_type = "ServerAssigment",normalize = True,
         return env
     return thunk
 
-def apply_obs_wrapper(env, config, buffer_obs_scale = None):
+def apply_obs_wrapper(env, config, buffer_obs_scale = None, link_obs_scale = None):
     if config.obs_scale < 1:
         raise ValueError("config.obs_scale must be greater than 1")
     if config.env_type == "ServerAllocation" and env.obs_links:
         # scale the first half of the observation vector by obsscale
         # scale the second half of the observation vector by 1/obsscale
         n_queues = env.n_queues
-        link_obs_scale = np.max(env.observation_space.high[n_queues:]) + 1
+        link_obs_scale = env.observation_space.high[n_queues:] + 1
         if buffer_obs_scale is None:
-            env.buffer_obs_scale = config.obs_scale
+            buffer_obs_scale = env.buffer_obs_scale = config.obs_scale
         else:
             env.buffer_obs_scale = buffer_obs_scale
         env.link_obs_scale = link_obs_scale
+        y = np.concatenate((buffer_obs_scale/2, link_obs_scale))
+        f_y = np.concatenate((2 * y[:n_queues] / buffer_obs_scale - 1, 2 * y[n_queues:] / link_obs_scale - 1))
         env = gym.wrappers.TransformObservation(env, lambda x: np.concatenate(
-            (2 * x[:n_queues] / config.obs_scale - 1, 2 * x[n_queues:] / link_obs_scale - 1)))
+            (2 * x[:n_queues] / buffer_obs_scale - 1, 2 * x[n_queues:] / link_obs_scale - 1)))
     else:
         env = gym.wrappers.TransformObservation(env, lambda x: 2 * x / config.obs_scale - 1)
     return env

@@ -265,7 +265,7 @@ class ServerAllocation(gym.Env):
         if self.obs_links:
             temp = self.get_buffers() * self.get_cap()
             return temp
-    def get_mask(self):
+    def get_mask(self, state = None):
         """
         Cases:
         Based on buffers being empty
