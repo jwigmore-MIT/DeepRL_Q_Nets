@@ -370,7 +370,7 @@ if __name__ == "__main__":
         next_obs_array, reward, terminated, truncated, info = envs.step(action)
         next_obs = torch.Tensor(next_obs_array).to(device)
 
-    pbar = tqdm(total = args.total_timesteps, ncols=80, desc="Training Steps")
+    pbar = tqdm(total = args.total_timesteps, ncols=80, desc="Training Steps", position=0, leave=True)
 
     for update in range(num_updates):
         pbar.update(n = args.num_steps)
@@ -574,6 +574,7 @@ if __name__ == "__main__":
                         clipfracs += [(((ratio - 1.0)[pg_inds]).abs() > args.clip_coef).float().mean().item()]
 
                     mb_advantages = b_advantages[mb_inds]
+                    mb_advantages2 = b_advantages[mb_inds]*(1-mb_interventions)
                     mb_stats["mb_adv_mean"].append(mb_advantages.mean().item())
                     mb_stats["mb_adv_std"].append(mb_advantages.std().item())
                     if args.norm_adv:
@@ -581,8 +582,12 @@ if __name__ == "__main__":
 
                     # Policy loss
                     pg_loss1 = -(mb_advantages * ratio)[pg_inds]
+                    pg_loss1b = -mb_advantages*ratio*(1-mb_interventions)
                     pg_loss2 = -(mb_advantages* torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef))[pg_inds]
+                    pg_loss2b = -mb_advantages*(1-mb_interventions) * torch.clamp(ratio*(1-mb_interventions), 1 - args.clip_coef, 1 + args.clip_coef)
+
                     pg_loss = torch.max(pg_loss1, pg_loss2).mean()*(1-mb_interventions).float().mean()
+                    pg_lossb = torch.max(pg_loss1b, pg_loss2b).mean()
                     entropy_loss = entropy[pg_inds].mean()
 
 
