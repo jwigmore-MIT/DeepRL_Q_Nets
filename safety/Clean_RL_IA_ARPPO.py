@@ -581,6 +581,7 @@ if __name__ == "__main__":
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
         clipfracs = []
+        entropies = []
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
             # Recording mb_stats
@@ -622,7 +623,8 @@ if __name__ == "__main__":
 
                     pg_loss = torch.max(pg_loss1, pg_loss2).mean()*(1-mb_interventions).float().mean()
                     pg_lossb = torch.max(pg_loss1b, pg_loss2b).mean()
-                    entropy_loss = entropy[pg_inds].mean()*(1-mb_interventions).float().mean()
+                    entropy_loss = entropy[pg_inds].mean()
+                    entropies += [entropy[pg_inds].mean().item()]
 
 
                 else:
@@ -641,6 +643,10 @@ if __name__ == "__main__":
                 if clipfracs[-1] > 1:
                     # throw error
                     raise ValueError("Clipping was more than 100%")
+                if entropies.__len__() <1:
+                    entropy_4log= np.nan
+                else:
+                    entropy_4log = np.mean(entropies)
                 # Value loss
                 newvalue = newvalue.view(-1)
                 bias_factor = args.nu*beta
@@ -676,7 +682,7 @@ if __name__ == "__main__":
                 log_dict = {
                     "update_info/learning_rate": optimizer.param_groups[0]["lr"],
                     "update_info/temperature": temperatures.mean(),
-                    "update_info/entropy_loss": entropy.mean().item(),
+                    "update_info/entropy_loss": entropy_4log,
                     "update_info/approx_abs_kl": approx_kl.abs().item(),
                     "update_info/clipfrac": np.mean(clipfracs),
                     "update_info/loss": loss.item(),
