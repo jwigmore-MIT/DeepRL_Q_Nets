@@ -1,5 +1,5 @@
 
-exp_name: "M6A1_CleanRL"
+exp_name: "M6A2_CleanRL"
 env_type: "ServerAllocation"
 obs_links: true
 seed: 5031998
@@ -7,14 +7,14 @@ torch_deterministic: true
 cuda: true
 track: true
 test: true
-wandb_project_name: "ServerAllocation_M6A1-O"
+wandb_project_name: "ServerAllocation_M6A2-O"
 capture_video: false
 policy_name: "IA-AR-PPO"
 save_models: true
 notes: For Clean RL based standard PPO implementation (discounted rewards)
 
 
-env_json_path: "/JSON/Environment/ServerAllocation/M6A1.json"
+env_json_path: "/JSON/Environment/ServerAllocation/M6A2.json"
 total_timesteps: 3.0e+6
 learning_rate: 3.0e-4
 num_envs: 1

@@ -31,7 +31,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
-import os
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 # my imports
 
@@ -208,7 +207,7 @@ def eval_model(agent, args, train_step = 0, test = False, pbar = None):
 
 
 if __name__ == "__main__":
-    config_file = os.path.relpath("clean_rl/ServerAllocation/M4/M4A1-O_IA_AR_PPO.yaml")
+    config_file = os.path.relpath("clean_rl/ServerAllocation/M6/M6A2-O_IA_AR_PPO.yaml")
 
 
     args = parse_args_or_config(config_file)
@@ -342,7 +341,8 @@ if __name__ == "__main__":
                     if np.mean(sr_backlogs[sr_steps-1000:sr_steps]) == np.mean(sr_backlogs[sr_steps-2000:sr_steps-1000]):
                         terminate = True
                 if sr_steps % args.num_steps == 0 or terminate:
-                    sr_pbar.set_description(f"Stable Rollout - Step {sr_steps}")
+                    #sr_pbar.set_description(f"Stable Rollout - Step {sr_steps}")
+                    sr_pbar.update(n = args.num_steps)
                     log_dict = {"sr_steps": sr_steps,
                                 "sr_backlog": np.mean(sr_backlogs[sr_steps-100:sr_steps])}
                     wandb.log(log_dict)
@@ -357,7 +357,9 @@ if __name__ == "__main__":
         max_buffer_state = max_state[:,:envs.envs[0].unwrapped.n_queues]
         mean_state = np.mean(sr_states[sr_steps-1000:sr_steps], axis=0)
         mean_buffer_state = mean_state[:,:envs.envs[0].unwrapped.n_queues]
-        substate_threshold = max_buffer_state
+        substate_threshold = max_buffer_state * 0.75
+        substate_threshold = mean_buffer_state*2
+        print("Sub State Threshold: ", substate_threshold)
         # need to get max_states before normalization
         # Apply normalization based on max_state
 
