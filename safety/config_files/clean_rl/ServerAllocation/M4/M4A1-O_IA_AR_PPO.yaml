@@ -27,7 +27,7 @@ update_epochs: 10
 norm_adv: true
 clip_coef: 0.2
 clip_vloss: false
-ent_coef: 0.03
+ent_coef: 0.01
 vf_coef: 0.5
 max_grad_norm: 0.5
 target_kl: ~
@@ -55,6 +55,9 @@ on_policy: true
 
 stable_rollout: true
 max_stable_rollout: 1000000
+intervention_type: "backlog"
+intervention_threshold_type: "mean"
+intervention_threshold_coef: 1.1
 
 
 

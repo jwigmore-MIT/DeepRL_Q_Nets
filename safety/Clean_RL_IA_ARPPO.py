@@ -38,6 +38,8 @@ from safety.utils import clean_rl_ppo_parse_config
 from tqdm import tqdm
 from safety.clean_rl_utils import observation_checker, parse_args_or_config, generate_clean_rl_env, apply_obs_wrapper, apply_reward_wrapper
 
+np.seterr(all='raise')
+
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -207,7 +209,7 @@ def eval_model(agent, args, train_step = 0, test = False, pbar = None):
 
 
 if __name__ == "__main__":
-    config_file = os.path.relpath("clean_rl/ServerAllocation/M6/M6A2-O_IA_AR_PPO.yaml")
+    config_file = os.path.relpath("clean_rl/ServerAllocation/M4/M4A1-O_IA_AR_PPO.yaml")
 
 
     args = parse_args_or_config(config_file)
@@ -368,7 +370,7 @@ if __name__ == "__main__":
                 print(f"Mean substate: {mean_buffer_state}")
                 print(f"Intervention threshold coefficient: {args.intervention_threshold_coef}")
                 print(f"Substate threshold: {substate_threshold}")
-        elif args.interention_type == "backlog":
+        elif args.intervention_type == "backlog":
             if args.intervention_threshold_type == "max":
                 backlog_threshold = args.intervention_threshold_coef * np.max(sr_backlogs[sr_steps-1000:sr_steps]) # take the max of the last 1000 steps
                 print(f"Max backlog: {np.max(sr_backlogs[sr_steps-1000:sr_steps])}")
@@ -421,7 +423,7 @@ if __name__ == "__main__":
             obs[step] = next_obs
             dones[step] = next_done
             if args.intervention_type == "backlog": # threshold based intervention
-                if envs.call("get_backlog")[0] > args.int_thresh:
+                if envs.call("get_backlog")[0] > backlog_threshold:
                     reward_penalty = - args.intervention_penalty
                     np_action = envs.call("get_stable_action", args.stable_policy)[0]
                     action = torch.Tensor([np_action]).to(device).int()
@@ -497,7 +499,7 @@ if __name__ == "__main__":
 
             temperatures[step] = agent.get_temperature(next_obs)
             actions[step] = action
-            last_ks[global_step] = np.mean(last_k)
+            #last_ks[global_step] = np.mean(last_k)
             logprobs[step] = logprob
 
             # TRY NOT TO MODIFY: execute the game and log data.
@@ -619,7 +621,7 @@ if __name__ == "__main__":
                     pg_loss = entropy_loss = torch.zeros(1).to(device)
                     pg_loss1 = pg_loss2 = entropy = torch.empty(0)
                     old_approx_kl = approx_kl = torch.zeros(1).to(device)
-                    clip_fracs = np.zeros(1).mean()
+                    clipfracs = np.zeros(1).mean()
                     # still need new_value for value losses
                     _, _, _, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds], b_masks[mb_inds])
                     mb_advantages = b_advantages[mb_inds]
