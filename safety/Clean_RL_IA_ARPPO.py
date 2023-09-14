@@ -622,7 +622,7 @@ if __name__ == "__main__":
 
                     pg_loss = torch.max(pg_loss1, pg_loss2).mean()*(1-mb_interventions).float().mean()
                     pg_lossb = torch.max(pg_loss1b, pg_loss2b).mean()
-                    entropy_loss = entropy[pg_inds].mean()
+                    entropy_loss = entropy[pg_inds].mean()*(1-mb_interventions).float().mean()
 
 
                 else:
