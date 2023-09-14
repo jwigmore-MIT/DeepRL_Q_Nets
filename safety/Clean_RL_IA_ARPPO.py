@@ -357,9 +357,31 @@ if __name__ == "__main__":
         max_buffer_state = max_state[:,:envs.envs[0].unwrapped.n_queues]
         mean_state = np.mean(sr_states[sr_steps-1000:sr_steps], axis=0)
         mean_buffer_state = mean_state[:,:envs.envs[0].unwrapped.n_queues]
-        substate_threshold = max_buffer_state * 0.75
-        substate_threshold = mean_buffer_state*2
-        print("Sub State Threshold: ", substate_threshold)
+        if args.intervention_type == "substate":
+            if args.intervention_threshold_type == "max":
+                substate_threshold = max_buffer_state * args.intervention_threshold_coef
+                print(f"Max substate: {max_buffer_state}")
+                print(f"Intervention threshold coefficient: {args.intervention_threshold_coef}")
+                print(f"Substate threshold: {substate_threshold}")
+            elif args.intervention_threshold_type == "mean":
+                substate_threshold = mean_buffer_state*args.intervention_threshold_coef
+                print(f"Mean substate: {mean_buffer_state}")
+                print(f"Intervention threshold coefficient: {args.intervention_threshold_coef}")
+                print(f"Substate threshold: {substate_threshold}")
+        elif args.interention_type == "backlog":
+            if args.intervention_threshold_type == "max":
+                backlog_threshold = args.intervention_threshold_coef * np.max(sr_backlogs[sr_steps-1000:sr_steps]) # take the max of the last 1000 steps
+                print(f"Max backlog: {np.max(sr_backlogs[sr_steps-1000:sr_steps])}")
+                print(f"Intervention threshold coefficient: {args.intervention_threshold_coef}")
+                print(f"Backlog threshold: {backlog_threshold}")
+            elif args.intervention_threshold_type == "mean":
+                backlog_threshold = args.intervention_threshold_coef * np.mean(sr_backlogs[sr_steps-1000:sr_steps]) # take the mean of the last 1000 steps
+                print(f"Mean backlog: {np.mean(sr_backlogs[sr_steps-1000:sr_steps])}")
+                print(f"Intervention threshold coefficient: {args.intervention_threshold_coef}")
+                print(f"Backlog threshold: {backlog_threshold}")
+
+
+
         # need to get max_states before normalization
         # Apply normalization based on max_state
 
@@ -398,7 +420,7 @@ if __name__ == "__main__":
             observation_checker(next_obs)
             obs[step] = next_obs
             dones[step] = next_done
-            if False: # threshold based intervention
+            if args.intervention_type == "backlog": # threshold based intervention
                 if envs.call("get_backlog")[0] > args.int_thresh:
                     reward_penalty = - args.intervention_penalty
                     np_action = envs.call("get_stable_action", args.stable_policy)[0]
@@ -417,7 +439,7 @@ if __name__ == "__main__":
                         action, logprob, _, value = agent.get_action_and_value(next_obs, mask = mask)
                         values[step] = value.flatten()
                         interventions[step] = torch.Tensor([0]).to(device)
-            elif True: # max_state based intervention
+            elif args.intervention_type == "substate": # max_state based intervention
                 if (envs.call("get_buffers") > substate_threshold).any():
                     reward_penalty = - args.intervention_penalty
                     np_action = envs.call("get_stable_action", args.stable_policy)[0]
