@@ -20,7 +20,7 @@ TODO:
 5. Implement other version of Bai's problems with more nodes
 
 """
-config_file = "clean_rl/ServerAllocation/M6/M6A2-O_IA_AR_PPO.yaml"
+config_file = "clean_rl/ServerAllocation/M8/M8A1-O_IA_AR_PPO.yaml"
 #config_file = "clean_rl/MSSA_N2S1_config1.yaml"
 args = clean_rl_ppo_parse_config(config_file)
 env = generate_clean_rl_env(args, env_type= "ServerAllocation", normalize = False)()
@@ -130,7 +130,7 @@ average_reliability = cap/test_length
 # mode_action = np.argmax(np.bincount(actions.astype(int)))
 
 plt.plot(lta_average_backlog, label= "LTA Average Backlog")
-plt.plot(v_backlogs, label = "Backlog")
+plt.plot(v_backlogs, label = "Backlog", alpha = 0.5)
 plt.plot(observations[:,:env.n_queues], label = [f"Queue {i}" for i in range(env.n_queues)])
 plt.legend()
 plt.show()

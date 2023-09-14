@@ -209,7 +209,7 @@ def eval_model(agent, args, train_step = 0, test = False, pbar = None):
 
 
 if __name__ == "__main__":
-    config_file = os.path.relpath("clean_rl/ServerAllocation/M4/M4A1-O_IA_AR_PPO.yaml")
+    config_file = os.path.relpath("clean_rl/ServerAllocation/M8/M8A1-O_IA_AR_PPO.yaml")
 
 
     args = parse_args_or_config(config_file)
@@ -345,8 +345,10 @@ if __name__ == "__main__":
                 if sr_steps % args.num_steps == 0 or terminate:
                     #sr_pbar.set_description(f"Stable Rollout - Step {sr_steps}")
                     sr_pbar.update(n = args.num_steps)
+                    lta_backlogs = np.cumsum(sr_backlogs[:sr_steps])/np.arange(1, sr_steps+1)
                     log_dict = {"sr_steps": sr_steps,
-                                "sr_backlog": np.mean(sr_backlogs[sr_steps-100:sr_steps])}
+                                "sr_backlog": np.mean(sr_backlogs[sr_steps-args.num_steps:sr_steps]),
+                                "sr_lta_backlog": lta_backlogs[-1]}
                     wandb.log(log_dict)
 
         if True:
@@ -395,6 +397,12 @@ if __name__ == "__main__":
         # torch_action  = torch.Tensor([action]).to(device).int()
         next_obs_array, reward, terminated, truncated, info = envs.step(action)
         next_obs = torch.Tensor(next_obs_array).to(device)
+
+    else:
+        if args.intervention_type == "backlog":
+            backlog_threshold = args.fixed_backlog_threshold
+        elif args.intervention_type == "substate":
+            substate_threshold = args.fixed_substate_threshold
 
     pbar = tqdm(total = args.total_timesteps, ncols=80, desc="Training Steps", position=0, leave=True)
 
@@ -621,7 +629,7 @@ if __name__ == "__main__":
                     pg_loss = entropy_loss = torch.zeros(1).to(device)
                     pg_loss1 = pg_loss2 = entropy = torch.empty(0)
                     old_approx_kl = approx_kl = torch.zeros(1).to(device)
-                    clipfracs = np.zeros(1).mean()
+                    clipfracs += [0]
                     # still need new_value for value losses
                     _, _, _, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds], b_masks[mb_inds])
                     mb_advantages = b_advantages[mb_inds]
@@ -630,7 +638,9 @@ if __name__ == "__main__":
                     if args.norm_adv:
                         mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
-
+                if clipfracs[-1] > 1:
+                    # throw error
+                    raise ValueError("Clipping was more than 100%")
                 # Value loss
                 newvalue = newvalue.view(-1)
                 bias_factor = args.nu*beta
@@ -654,52 +664,53 @@ if __name__ == "__main__":
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 optimizer.step()
 
-            if args.target_kl is not None:
-                if approx_kl > args.target_kl:
-                    break
 
-        y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
-        error = np.abs(y_pred - y_true)
-        var_y = np.var(y_true)
-        explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
-        # TRY NOT TO MODIFY: record rewards for plotting purposes
-        if args.track:
-            log_dict = {
-                "update_info/learning_rate": optimizer.param_groups[0]["lr"],
-                "update_info/temperature": temperatures.mean(),
-                "update_info/entropy_loss": entropy.mean().item(),
-                "update_info/approx_abs_kl": approx_kl.abs().item(),
-                "update_info/clipfrac": np.mean(clipfracs),
-                "update_info/loss": loss.item(),
-                "update_info/clipped_pg_loss": pg_loss.item(),
-                "update_info/abs_pg_loss": pg_loss.abs().item(),
-                "update_info/unclipped_pg_loss": pg_loss1.mean().item(),
-                "update_info/value_loss": v_loss.item(),
-                "update_info/avg_value": b_values.mean().item(),
-                "update_info/critic_error": error.mean(),
-                "update_info/advantages": advantages.mean().item(),
-                "update_info/explained_variance": explained_var,
-                "update_info/old_approx_kl": old_approx_kl.item(),
-                "update_info/mb_adv_mean": np.mean(mb_stats["mb_adv_mean"]),
-                "update_info/mb_adv_std": np.mean(mb_stats["mb_adv_std"]),
-                "ARPPO_info/eta": eta,
-                "ARPPO_info/beta": beta,
-                "ARPPO_info/bias_factor": bias_factor,
+            y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
+            error = np.abs(y_pred - y_true)
+            var_y = np.var(y_true)
+            explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
-                "rollout/backlog": np.mean(backlogs[:global_step]),
-                "rollout/time_averaged_backlog": time_averaged_backlog,
-                "rollout/window_average_backlog": window_average_backlog,
-                "rollout/rewards": np.mean(rewards.cpu().numpy()),
-                "rollout/episode": update,
-                "rollout/intervention_rate": interventions.mean().item(),
-                # "rollout/mean_diff": mean_diff,
-                # "rollout/last_k_mean": np.mean(last_k),
-                "update_info/update": update,
-                "global_step": global_step,
+            # TRY NOT TO MODIFY: record rewards for plotting purposes
+            if args.track:
+                log_dict = {
+                    "update_info/learning_rate": optimizer.param_groups[0]["lr"],
+                    "update_info/temperature": temperatures.mean(),
+                    "update_info/entropy_loss": entropy.mean().item(),
+                    "update_info/approx_abs_kl": approx_kl.abs().item(),
+                    "update_info/clipfrac": np.mean(clipfracs),
+                    "update_info/loss": loss.item(),
+                    "update_info/clipped_pg_loss": pg_loss.item(),
+                    "update_info/abs_pg_loss": pg_loss.abs().item(),
+                    "update_info/unclipped_pg_loss": pg_loss1.mean().item(),
+                    "update_info/value_loss": v_loss.item(),
+                    "update_info/avg_value": b_values.mean().item(),
+                    "update_info/critic_error": error.mean(),
+                    "update_info/advantages": advantages.mean().item(),
+                    "update_info/explained_variance": explained_var,
+                    "update_info/old_approx_kl": old_approx_kl.item(),
+                    "update_info/mb_adv_mean": np.mean(mb_stats["mb_adv_mean"]),
+                    "update_info/mb_adv_std": np.mean(mb_stats["mb_adv_std"]),
+                    "ARPPO_info/eta": eta,
+                    "ARPPO_info/beta": beta,
+                    "ARPPO_info/bias_factor": bias_factor,
 
-            }
-            wandb.log(log_dict)
+                    "rollout/backlog": np.mean(backlogs[:global_step]),
+                    "rollout/time_averaged_backlog": time_averaged_backlog,
+                    "rollout/window_average_backlog": window_average_backlog,
+                    "rollout/rewards": np.mean(rewards.cpu().numpy()),
+                    "rollout/episode": update,
+                    "rollout/intervention_rate": interventions.mean().item(),
+                    # "rollout/mean_diff": mean_diff,
+                    # "rollout/last_k_mean": np.mean(last_k),
+                    "update_info/update": update,
+                    "global_step": global_step,
+
+                }
+                wandb.log(log_dict)
+                if args.target_kl is not None:
+                    if approx_kl > args.target_kl:
+                        break
 
 
 

@@ -1,0 +1,93 @@
+{
+  "problem_instance": {
+    "name": "SA-Symmetric-2N",
+    "notes": "",
+    "visible_links": true,
+    "nodes": "[1, 2, 3, 4, 5, 6, 7, 8, 9]",
+    "links": "[[1,9], [2,9], [3,9], [4,9], [5,9], [6,9], [7,9], [8,9]]",
+    "classes": {
+      "1": {
+        "source": 1,
+        "destination": 9,
+        "arrival": 1,
+        "probability": 0.125
+      },"2": {
+        "source": 2,
+        "destination": 9,
+        "arrival": 1,
+        "probability": 0.125
+      },
+      "3": {
+          "source": 3,
+          "destination": 9,
+          "arrival": 1,
+          "probability": 0.25
+      },
+      "4": {
+          "source": 4,
+          "destination": 9,
+          "arrival": 1,
+          "probability": 0.25
+      },
+        "5": {
+            "source": 5,
+            "destination": 9,
+            "arrival": 1,
+            "probability": 0.25
+        },
+      "6": {
+            "source": 6,
+            "destination": 9,
+            "arrival": 1,
+            "probability": 0.25
+        },
+        "7": {
+            "source": 7,
+            "destination": 9,
+            "arrival": 1,
+            "probability": 0.25
+        },
+      "8": {
+            "source": 8,
+            "destination": 9,
+            "arrival": 1,
+            "probability": 0.25
+        }
+
+    },
+    "capacities": {
+      "(1,9)": {
+        "capacity": "[0,1]",
+        "probability": "[0.3, 0.7]"
+      },
+      "(2,9)": {
+        "capacity": "[0,1]",
+        "probability": "[0.3, 0.7]"
+      },
+      "(3,9)": {
+        "capacity": "[0, 1, 2]",
+        "probability": "[0.2, 0.5, 0.3]"
+      },
+      "(4,9)": {
+        "capacity": "[0, 1, 2]",
+        "probability": "[0.2, 0.5, 0.3]"
+      },
+      "(5,9)": {
+          "capacity": "[0, 1, 2]",
+          "probability": "[0.1, 0.1, 0.8]"
+      },
+      "(6,9)": {
+          "capacity": "[0, 1, 2]",
+          "probability": "[0.1, 0.1, 0.8]"
+      },
+        "(7,9)": {
+            "capacity": "[0, 1, 2, 3]",
+            "probability": "[0.25, 0.25, 0.25, 0.25]"
+        },
+      "(8,9)": {
+            "capacity": "[0, 1, 2, 3]",
+            "probability": "[0.25, 0.25, 0.25, 0.25]"
+        }
+    }
+  }
+}
