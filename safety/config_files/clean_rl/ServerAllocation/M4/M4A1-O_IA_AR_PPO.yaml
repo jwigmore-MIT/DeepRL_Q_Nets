@@ -55,9 +55,9 @@ on_policy: true
 
 stable_rollout: true
 max_stable_rollout: 1000000
-intervention_type: "backlog"
-intervention_threshold_type: "mean"
-intervention_threshold_coef: 1.1
+intervention_type: "substate"
+intervention_threshold_type: "max"
+intervention_threshold_coef: 0.6
 
 
 
