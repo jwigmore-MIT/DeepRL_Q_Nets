@@ -6,7 +6,7 @@ import torch
 from tqdm import tqdm
 import pickle
 
-config_file = "clean_rl/ServerAllocation/M4/M4A1-O_IA_AR_PPO.yaml"
+config_file = "clean_rl/ServerAllocation/M8/M8A1-O_IA_AR_PPO.yaml"
 args = clean_rl_ppo_parse_config(config_file)
 if args.obs_links:
     run_types = ["DP","MWCQ","LCQ", "RCQ"]#,"RQ"]
